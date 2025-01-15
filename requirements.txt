@@ -1,0 +1,10 @@
+fastapi[standard]
+slack-sdk
+slack-bolt
+pymongo
+openai
+langchain-community
+langchain-core
+langchain-openai
+apscheduler
+pytz
