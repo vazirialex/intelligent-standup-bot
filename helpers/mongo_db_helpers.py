@@ -12,7 +12,7 @@ def get_updates_by_id(user_id: str):
 
 def insert_item(user_id, extracted_updates, now_pst):
     updates_collection.insert_one({
-            "user_id": user_id,
-            "updates": extracted_updates,
-            "timestamp": now_pst
-        })
+        "user_id": user_id,
+        "updates": extracted_updates,
+        "timestamp": now_pst
+    })

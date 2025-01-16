@@ -12,60 +12,51 @@ from datetime import datetime, timedelta, UTC
 from dotenv import find_dotenv, load_dotenv
 import os
 import pytz
-from helpers.llm_helpers import extract_updates_from_text
-from helpers.slack_helpers import send_standup_messages
+import helpers.slack_helpers as slack_helpers
 from helpers.mongo_db_helpers import get_updates_by_id, insert_item
-
-app = FastAPI()
-
-@app.on_event("startup")
-def schedule_jobs():
-    # schedule.every().day.at("09:00").do(send_standup_messages)
-    schedule.every().minute.do(send_standup_messages)
-    
-    def run_continuously():
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
-
-    import threading
-    threading.Thread(target=run_continuously, daemon=True).start()
+from slack_bolt.app.async_app import AsyncApp
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
 load_dotenv(find_dotenv())
 
-@app.post("/verify")
-async def verify_slack_events(event: dict):
-    def verify_challenge():
-        if "challenge" in event:
-            return event["challenge"]
-        return None
-    return {"challenge": verify_challenge()}
+app = AsyncApp(token=os.environ["SLACK_BOT_TOKEN"])
 
-@app.post("/slack/events")
-async def handle_slack_events(event: dict):
-    if "event" in event and event["event"]["type"] == "message":
-        user_id = event["event"]["user"]
-        text = event["event"]["text"]
+@app.message()
+async def respond_to_message(message, say):
+    # say() sends a message to the channel where the event was triggered
+    print(message)
+    extracted_updates = slack_helpers.handle_new_message(message)
+    await say(
+        # blocks=[
+        #     {
+        #         "type": "section",
+        #         "text": {"type": "mrkdwn", "text": f"Hey there <@{message['user']}>!"},
+        #         "accessory": {
+        #             "type": "button",
+        #             "text": {"type": "plain_text", "text": "Click Me"},
+        #             "action_id": "button_click"
+        #         }
+        #     }
+        # ],
+        text=f"Hey there <@{message['user']}>. Your response is {extracted_updates}!"
+    )
 
-        # Extract updates using OpenAI
-        extracted_updates = extract_updates_from_text(text)
-        print("finished extracting updates")
-        pst_timezone = pytz.timezone('America/Los_Angeles')
-        now_utc = datetime.now(UTC)
-        now_pst = now_utc.astimezone(pst_timezone)
+@app.action("button_click")
+async def action_button_click(body, ack, say):
+    # Acknowledge the action
+    ack()
+    await say(f"<@{body['user']['id']}> clicked the button")
 
-        # Save updates to MongoDB
-        insert_item(user_id, extracted_updates, now_pst)
+async def schedule_standup_message():
+    while True:
+        await slack_helpers.send_standup_messages()
+        await asyncio.sleep(180)
 
-        return {"status": "ok"}
+async def main():
+    asyncio.ensure_future(schedule_standup_message())
+    handler = AsyncSocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    await handler.start_async()
 
-    raise HTTPException(status_code=400, detail="Invalid event format")
-
-@app.get("/updates/{user_id}")
-async def get_user_updates(user_id: str):
-    return get_updates_by_id(user_id)
-
-# Main entry point to start the FastAPI application
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import asyncio
+    asyncio.run(main())

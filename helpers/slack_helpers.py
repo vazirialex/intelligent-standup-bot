@@ -9,18 +9,21 @@ import requests
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from dotenv import find_dotenv, load_dotenv
 import os
 import pytz
 from .github_helpers import fetch_github_activity
+from .llm_helpers import extract_updates_from_text
+from .mongo_db_helpers import insert_item
+
 
 load_dotenv(find_dotenv())
 
-slack_client = WebClient(token=os.environ["SLACK_API_TEST_OAUTH_TOKEN"])
+slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
 _usergroup_id = os.environ["SLACK_USER_GROUP_ID"]
 
-def get_all_users():
+def _get_all_users():
     try:
         response = slack_client.usergroups_users_list(usergroup=_usergroup_id)
         users = response["users"]
@@ -29,8 +32,17 @@ def get_all_users():
         print(f"Error fetching users: {e.response['error']}")
         raise e
 
-def send_standup_messages():
-    users = get_all_users()
+def fetch_conversation_history(user_id):
+    try:
+        response = slack_client.conversations_history(user=user_id)
+        messages = response["messages"]
+        return messages
+    except SlackApiError as e:
+        print(f"Error fetching conversation history: {e.response['error']}")
+        raise e
+
+async def send_standup_messages():
+    users = _get_all_users()
     for user_id in users:
         print(f"Sending standup message to {user_id}")
         try:
@@ -46,3 +58,21 @@ def send_standup_messages():
             )
         except SlackApiError as e:
             print(f"Error sending message to {user_id}: {e.response['error']}")
+
+def handle_new_message(message: dict):
+    if "type" in message and message["type"] == "message":
+        user_id = message["user"]
+        text = message["text"]
+
+        # Extract updates using OpenAI
+        extracted_updates = extract_updates_from_text(text)
+        pst_timezone = pytz.timezone('America/Los_Angeles')
+        now_utc = datetime.now(UTC)
+        now_pst = now_utc.astimezone(pst_timezone)
+
+        # Save updates to MongoDB
+        insert_item(user_id, extracted_updates, now_pst)
+
+        return extracted_updates
+
+    raise HTTPException(status_code=400, detail="Invalid event format")

@@ -14,6 +14,8 @@ from dotenv import find_dotenv, load_dotenv
 import os
 import pytz
 
+load_dotenv(find_dotenv())
+
 github_api_base_url = "https://api.github.com"
 github_token = os.environ["GITHUB_TOKEN"]
 github_headers = {
