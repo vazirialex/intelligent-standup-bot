@@ -6,5 +6,7 @@ openai
 langchain-community
 langchain-core
 langchain-openai
+langchain-anthropic
+schedule
 apscheduler
 pytz
