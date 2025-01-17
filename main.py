@@ -13,10 +13,11 @@ from dotenv import find_dotenv, load_dotenv
 import os
 import pytz
 import helpers.slack_helpers as slack_helpers
-from helpers.mongo_db_helpers import get_updates_by_id, delete_item
+from helpers.mongo_db_helpers import get_standup_updates_by_user_id, delete_item
 from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
-from agent import agent
+from agent import agent_executor, execute_agent_with_context
+from tool_agent import agent, execute_agent_with_user_context
 
 load_dotenv(find_dotenv())
 
@@ -24,8 +25,26 @@ app = AsyncApp(token=os.environ["SLACK_BOT_TOKEN"])
 
 @app.message()
 async def respond_to_message(message, say):
-    # say() sends a message to the channel where the event was triggered
-    agent_response = agent.invoke(message["text"]).tool_calls
+    # get standup update if it exists from db then pass it to the agent along with the message text
+    # agent_response = agent.invoke(message["text"]).tool_calls
+    # agent_response = await execute_agent_with_context(agent_executor, message["text"], message["user"])
+
+    # m = """
+    # User id is: {user_id}
+
+    # User message is: {message}
+    # # """.format(user_id=message["user"], message=message["text"])
+    # # agent_response = execute_agent_with_user_context(m, message["user"]).tool_calls
+
+    # agent_response = agent_executor.invoke(
+    #     {
+    #         "input": m,
+    #         "chat_history": [],
+    #     }
+    # )
+
+    agent_response = execute_agent_with_user_context(message["text"], message["user"])
+    print(agent_response)
     if not agent_response:
         await say(text="Sorry, I didn't understand that.")
         return
@@ -54,7 +73,7 @@ async def action_button_click(body, ack, say):
 async def get_updates(ack, body):
     ack()
     user_id = body["user_id"]
-    updates = await get_updates_by_id(user_id)
+    updates = await get_standup_updates_by_user_id(user_id)
     return updates
 
 @app.command("/delete")
@@ -65,7 +84,7 @@ async def delete(ack, body):
         return f"Deleted updates for {date}"
     except Exception as e:
         print(e)
-        return f"Sorry, we weren't able to delete the updates."
+        return "Sorry, we weren't able to delete the updates."
 
 async def schedule_standup_message():
     num_seconds_in_one_day = 86400

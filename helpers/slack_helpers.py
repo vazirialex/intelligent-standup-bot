@@ -36,7 +36,6 @@ def fetch_conversation_history(channel_id, date=None):
     try:
         response = slack_client.conversations_history(channel=channel_id)
         messages = response["messages"]
-        # date is in the format "YYYY-MM-DD" can you convert it to epoch milli?
         epoch_milli = int(datetime.strptime(date, "%Y-%m-%d").timestamp()) * 1000
         if date:
             messages = [msg for msg in messages if float(msg["ts"]) >= epoch_milli]
