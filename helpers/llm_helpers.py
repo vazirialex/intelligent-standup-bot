@@ -5,6 +5,8 @@ import requests
 from dotenv import find_dotenv, load_dotenv
 import os
 import json
+from typing import List, Any
+from models import StandupUpdate
 
 load_dotenv(find_dotenv())
 # llm = ChatOpenAI(
@@ -24,7 +26,10 @@ llm = ChatAnthropic(
     max_retries=2
 )
 
-def extract_updates_from_text(text: str):
+def create_standup_update(text: str) -> StandupUpdate:
+    """
+    Given a user's standup update, extract the key insights from the update if the update has sufficient information to craft a response.
+    """
     messages = [
         ( "system",
             """
@@ -77,31 +82,87 @@ def extract_updates_from_text(text: str):
     prompt = ChatPromptTemplate.from_messages(messages)
     formatted_prompt = prompt.format(text=text)
     response = llm.invoke(formatted_prompt)
-    return json.loads(response.content)
+    return StandupUpdate.model_validate_json(response.content)
 
-def insufficient_information_response(conversation_history):
+def make_edits_to_update(update: str, text: str):
     """
-        EDIT: TURN EACH ELEMENT IN THE CONVERSATION HISTORY INTO A MESSAGE SEPARATED BY BOT AND HUMAN
+    Given an update and a user's reply, make edits to the user's standup update.
     """
-    template = """
-    You are a project manager whose goal is to read a standup update from a software developer and classify it as an update to an existing ticket given conversation history.
-    Given {conversation_history}, please respond to the user asking the information you would need for a sufficient standup update.
-    
-    """
-    prompt = ChatPromptTemplate(messages=messages)
-    formatted_prompt = prompt.format(conversation_history=conversation_history)
+    messages = [
+        (
+            "system",
+            """
+            You are a project manager that listens to standup updates from developers and makes edits to their updates.
+                
+            Your goal is to take what developers are saying and make edits to an update that you will be provided.
+                
+            Here are some important rules to follow:
+            1. Make edits to the user's standup update. You can make any changes you see fit.
+            2. If you notice changes in their preferred writing style, update the preferred style in the provided update. (Something like Paragraph, Bullet points, etc.)
+            3. Add or remove any information that you deem necessary given the user's reply.
+            4. Valid statuses are NOT_STARTED, IN_PROGRESS, REJECTED, COMPLETED, BLOCKED. Use your best judgment to determine the status.
+            5. Return the response in JSON format, following the same structure as the update provided below.
+
+            Example:
+            INPUT
+            Update: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
+            Human: I actually finished task-1. task-2 is also unblocked now because team-1 has responded. I have also picked up task-3 now. task-4 is on my board but isn't our problem.
+                
+            OUTPUT
+            {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"COMPLETED\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-3\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-4\",\"status\": \"REJECTED\",\"identified_blockers\": []}}]}}
+
+            Update:
+            {update}
+            """
+        ),
+        (
+            "human",
+            "{text}"
+        )
+    ]
+    prompt = ChatPromptTemplate.from_messages(messages)
+    formatted_prompt = prompt.format(update=update, text=text)
     response = llm.invoke(formatted_prompt)
-    return json.loads(response.content)
+    return StandupUpdate.model_validate_json(response.content)
 
-def classify_message(text):
-    template = """
-    You are a project manager whose goal is to read a standup update from a software developer and classify it as an update to an existing ticket given conversation history.
-    
+def insufficient_information_response(conversation_history: str) -> str:
     """
-    prompt = ChatPromptTemplate(
-        input_variables=["text"],
-        template="Extract ticket updates from the following standup update text: {text}. Provide the ticket number and status update."
-    )
-    formatted_prompt = prompt.format(text=text)
-    response = openai.run(formatted_prompt)
-    return response
+    Responds to a user when their standup update is missing information, is vague or unclear, or if you need more details to understand the update.
+    """
+    formatted_conversation_history = format_conversation_history(conversation_history)
+    template = [
+        (
+            "system",
+            """
+            You are a project manager whose goal is to read a standup update from a software developer and respond to the message in a professional manner.
+            You are given the following conversation history here:
+            
+            {formatted_conversation_history}
+            
+            Please respond to the user asking the information you would need for a sufficient standup update.
+            """
+        )
+    ]
+    prompt = ChatPromptTemplate(messages=messages)
+    formatted_prompt = prompt.format(formatted_conversation_history=formatted_conversation_history)
+    response = llm.invoke(formatted_prompt)
+    return response.content
+
+def format_conversation_history(messages: List[Any]) -> str:
+    formatted_messages = []
+    messages = sorted(messages, key=lambda m: m["ts"])
+    for message in messages:
+        user = message['user']
+        text = message['text']
+        formatted_messages.append(f"{user}: {text}")
+    return "\n".join(formatted_messages)
+
+def _split_conversation_history(conversation_history: List[str]):
+    bot_messages = []
+    human_messages = []
+    for message in conversation_history:
+        if message["user"] == "system":
+            bot_messages.append(message["text"])
+        else:
+            human_messages.append(message["text"])
+    return bot_messages, human_messages
