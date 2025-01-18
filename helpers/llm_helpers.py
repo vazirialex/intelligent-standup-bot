@@ -30,7 +30,8 @@ llm = ChatOpenAI(
 
 def create_standup_update(text: str, user_id: str) -> dict:
     """
-    Given a user's standup update, extract the key insights from the update if the update has sufficient information to craft a response.
+    Given a user's standup update, extract the key insights from the update if the update has sufficient information to craft a response. 
+    Only use this tool if there is no update already in the database.
     """
     messages = [
         SystemMessage(
@@ -91,13 +92,13 @@ def create_standup_update(text: str, user_id: str) -> dict:
 
 def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_id: str) -> dict:
     """
-    Given an update and a user's reply, make edits to the user's standup update based on the conversation history and the user's reply.
+    Given an update and a user's reply, make edits to the user's standup update based on the conversation history and the user's reply. Only make edits if there is sufficient information to make edits.
     """
     update = get_standup_updates_by_user_id(user_id) if update_exists else False
     if not update:
         print("make edits to update called but no update exists")
-        return insufficient_information_response(user_id, channel_id, text)
-    chat_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)
+        return ask_question_response(user_id, channel_id, text)
+    chat_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=4)
     formatted_chat_history = convert_conversation_history_to_langchain_messages(chat_history)
     messages = [
         SystemMessage(
@@ -137,13 +138,44 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_i
     formatted_prompt = prompt.format(update=update, user_id=user_id, text=text)
     response = llm.invoke(formatted_prompt)
     print()
-    print("Response is: ", response.content)
+    print("Response from llm for update edits: ", response.content)
     print()
     return json.loads(response.content)
 
-def insufficient_information_response(user_id: str, channel_id: str, message: str) -> str:
+def ask_question_response(user_id: str, channel_id: str, message: str) -> str:
     """
-    Responds to a user when their standup update is missing information, is vague or unclear, or if you need more details to understand the update.
+    Responds to the user with appropriate clarifying questions when their standup update is missing information, is vague or unclear, or if more details are needed to understand the update.
+    """
+    # conversation_history = fetch_conversation_history(channel_id, max_number_of_messages_to_fetch=6)
+    conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=6)
+    formatted_conversation_history = convert_conversation_history_to_langchain_messages(conversation_history)
+    messages = [
+        SystemMessage(
+            """
+            You are a project manager whose goal is to read a standup update from a software developer and respond to the message in a professional manner.
+            For example, if the user says "Can you update task-1 and task-2", you should respond with "Can you provide more details about the status of task-1 and task-2?"
+
+            You will be provided a conversation history of the user, their most recent message, and their standup update conversation thus far. 
+            You should respond to the user asking the information you would need for a sufficient standup update.
+
+            Here is what constitutes a sufficient standup update:
+            - The user has provided a list of tasks and their statuses. Use the conversation history to determine if the user has provided a list of tasks and their statuses.
+            - If a user has a blocked task, you should ask them why it's blocked to keep track of identified blockers per task
+
+            Only ask what you need to get the tasks, statuses, and potential blockers.
+
+            You may use your own judgment to help you determine if the user has provided a sufficient standup update. Keep your response concise and to the point.
+            """
+        ),
+        *formatted_conversation_history,
+        HumanMessage(content=message)
+    ]
+    response = llm.invoke(messages)
+    return response.content
+
+def friendly_conversation_response(user_id: str, channel_id: str, message: str) -> str:
+    """
+    Responds to generic messages from the user that are not standup updates, such as common replies that end a conversation.
     """
     # conversation_history = fetch_conversation_history(channel_id, max_number_of_messages_to_fetch=6)
     conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)

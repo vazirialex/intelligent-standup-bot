@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.messages.system import SystemMessage
 import json
 
-def reply(channel_id, user_id, message) -> str:
+def reply(channel_id, user_id, message, used_tool) -> str:
     # Get conversation history and convert to langchain messages
     # conversation_history = fetch_conversation_history(channel_id, max_number_of_messages_to_fetch=6)
     conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=4)
@@ -14,7 +14,7 @@ def reply(channel_id, user_id, message) -> str:
     has_update = update_exists(user_id)
     system_prompt = ""
     
-    if has_update:
+    if has_update and used_tool in ["create_standup_update", "make_edits_to_update"]:
         update_data = get_standup_updates_by_user_id(user_id)
 
         print("update data from reply agent is: ", update_data)
@@ -27,10 +27,10 @@ def reply(channel_id, user_id, message) -> str:
         {update_data['updates']['updates']}
         
         Please format this update into a well-structured Slack message using markdown.
-        Follow the developer's preferred style: {update_data['updates']['preferred_style']}.
+        Write your response such that it follows the developer's preferred writing style: {update_data['updates']['preferred_style']}.
         
         For tasks that are BLOCKED, make sure to highlight the blockers clearly.
-        Use appropriate markdown formatting to make the message easy to read.
+        Use appropriate markdown formatting to make the message easy to read and include emojis for each task's status.
 
         Only reply with the relevant information. Do not include any other information.
         """

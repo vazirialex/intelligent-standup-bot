@@ -66,7 +66,7 @@ def save_message_to_db(user_id, message, channel_id, is_bot):
 
 def get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=10):
     result = list(messages_collection.find({"user_id": user_id, "channel_id": channel_id}, {"_id": 0}).sort("timestamp", -1))[:max_number_of_messages_to_fetch]
-    print("result is: ", result)
+    print("slack messages from db: ", result)
     return result
 
 

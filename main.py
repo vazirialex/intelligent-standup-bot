@@ -26,11 +26,11 @@ app = AsyncApp(token=os.environ["SLACK_BOT_TOKEN"])
 @app.message()
 async def respond_to_message(message, say):
     save_message_to_db(message["user"], message["text"], message["channel"], False)
-    tool_agent_response = execute_agent_with_user_context(message["text"], message["user"], message["channel"])
+    tool_agent_response, used_tool = execute_agent_with_user_context(message["text"], message["user"], message["channel"])
     if not tool_agent_response:
         await say(text="Sorry, I didn't understand that.")
         return
-    reply_agent_response = reply(message["channel"], message["user"], message["text"])
+    reply_agent_response = reply(message["channel"], message["user"], message["text"], used_tool)
     save_message_to_db(message["user"], reply_agent_response, message["channel"], True)
     await say(text=reply_agent_response)
 
