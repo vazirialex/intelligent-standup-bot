@@ -4,6 +4,7 @@ from datetime import datetime
 client = MongoClient("mongodb://localhost:27017/")
 db = client["standup_db"]
 updates_collection = db["daily_updates"]
+messages_collection = db["messages"]
 
 def get_standup_updates_by_user_id(user_id: str, date = None):
     """
@@ -19,7 +20,6 @@ def insert_item(user_id, extracted_updates):
     now = datetime.now()
     date = now.strftime("%Y-%m-%d")
     if update_exists(user_id):
-        print("Update exists already")
         update_item(user_id, extracted_updates)
     else:
         updates_collection.insert_one({
@@ -53,3 +53,20 @@ def persist_scheduled_message(user_id, message, scheduled_time):
 
 def standup_message_sent(user_id, date = None):
     return True
+
+def save_message_to_db(user_id, message, channel_id, is_bot):
+    messages_collection.insert_one({
+        "type": "message",
+        "is_bot": is_bot,
+        "user_id": user_id,
+        "message": message,
+        "channel_id": channel_id,
+        "timestamp": datetime.now()
+    })
+
+def get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=10):
+    result = list(messages_collection.find({"user_id": user_id, "channel_id": channel_id}, {"_id": 0}).sort("timestamp", -1))[:max_number_of_messages_to_fetch]
+    print("result is: ", result)
+    return result
+
+

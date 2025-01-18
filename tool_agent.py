@@ -16,6 +16,7 @@ get_standup_update_by_user_id_tool = StructuredTool.from_function(func=get_stand
 
 tool_map = {
     "create_standup_update": create_standup_update_tool,
+    "insufficient_information_response": insufficient_information_tool,
     "insufficient_information": insufficient_information_tool,
     "make_edits_to_update": make_edits_to_update_tool
 }
@@ -29,14 +30,15 @@ tools = [
 
 agent = llm.bind_tools(tools)
 
-def execute_agent_with_user_context(message: str, user_id: str):
+def execute_agent_with_user_context(message: str, user_id: str, channel_id: str):
     has_update = update_exists(user_id)
     m = """
+    Channel id is: {channel_id}
     User id is: {user_id}
     Update exists: {update_exists}
 
     User message is: {message}
-    # """.format(user_id=user_id, message=message, update_exists="Yes, an update exists" if has_update else "No update exists")
+    # """.format(channel_id=channel_id, user_id=user_id, message=message, update_exists="Yes, an update exists" if has_update else "No update exists")
     # TODO: need a way to ensure only one tool is returned
     tool_response = agent.invoke(m)
 
@@ -51,5 +53,6 @@ def execute_agent_with_user_context(message: str, user_id: str):
 
     agent_response = execute_tool_call(tool_response)
     if tool_response.tool_calls[0]["name"] in ["create_standup_update", "make_edits_to_update"]:
+        # insert standup update to standup collection
         insert_item(user_id, agent_response)
     return agent_response

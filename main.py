@@ -13,7 +13,7 @@ from dotenv import find_dotenv, load_dotenv
 import os
 import pytz
 import helpers.slack_helpers as slack_helpers
-from helpers.mongo_db_helpers import get_standup_updates_by_user_id, delete_item
+from helpers.mongo_db_helpers import get_standup_updates_by_user_id, delete_item, save_message_to_db
 from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from tool_agent import agent, execute_agent_with_user_context
@@ -25,11 +25,13 @@ app = AsyncApp(token=os.environ["SLACK_BOT_TOKEN"])
 
 @app.message()
 async def respond_to_message(message, say):
-    tool_agent_response = execute_agent_with_user_context(message["text"], message["user"])
+    save_message_to_db(message["user"], message["text"], message["channel"], False)
+    tool_agent_response = execute_agent_with_user_context(message["text"], message["user"], message["channel"])
     if not tool_agent_response:
         await say(text="Sorry, I didn't understand that.")
         return
     reply_agent_response = reply(message["channel"], message["user"], message["text"])
+    save_message_to_db(message["user"], reply_agent_response, message["channel"], True)
     await say(text=reply_agent_response)
 
 @app.action("button_click")

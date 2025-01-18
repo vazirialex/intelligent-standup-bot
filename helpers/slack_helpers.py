@@ -14,7 +14,6 @@ from dotenv import find_dotenv, load_dotenv
 import os
 import pytz
 from .github_helpers import fetch_github_activity
-from .llm_helpers import create_standup_update
 from .mongo_db_helpers import insert_item, persist_scheduled_message, standup_message_sent
 
 
@@ -32,13 +31,14 @@ def _get_all_users():
         print(f"Error fetching users: {e.response['error']}")
         raise e
 
-def fetch_conversation_history(channel_id, date=None):
+def fetch_conversation_history(channel_id, date=None, max_number_of_messages_to_fetch=10):
     try:
         response = slack_client.conversations_history(channel=channel_id)
         messages = response["messages"]
         target_date = datetime.strptime(date, "%Y-%m-%d") if date else datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         start_timestamp = target_date.timestamp()
-        return [msg for msg in messages if float(msg["ts"]) >= start_timestamp]
+        print("messages are: ", messages)
+        return [msg for msg in messages if float(msg["ts"]) >= start_timestamp][:max_number_of_messages_to_fetch]
     except SlackApiError as e:
         print(f"Error fetching conversation history: {e.response['error']}")
         return []
@@ -73,22 +73,3 @@ async def send_standup_messages():
             persist_scheduled_message(user_id, text, now)
         except SlackApiError as e:
             print(f"Error sending message to {user_id}: {e.response['error']}")
-
-def handle_new_message(message: dict):
-    if "type" in message and message["type"] == "message":
-        user_id = message["user"]
-        text = message["text"]
-
-        # Extract updates using LLM
-        extracted_updates = create_standup_update(text)
-        pst_timezone = pytz.timezone('America/Los_Angeles')
-        now_utc = datetime.now(UTC)
-        now_pst = now_utc.astimezone(pst_timezone)
-
-        # Save updates to MongoDB.
-        # TODO: check if update is valid before inserting? Cross-validate with Linear data?
-        insert_item(user_id, extracted_updates, now_pst)
-
-        return extracted_updates
-
-    raise HTTPException(status_code=400, detail="Invalid event format")

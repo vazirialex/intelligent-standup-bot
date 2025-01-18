@@ -1,27 +1,14 @@
-from helpers.mongo_db_helpers import update_exists, get_standup_updates_by_user_id
-from helpers.llm_helpers import llm
-from helpers.slack_helpers import fetch_conversation_history
+from helpers.mongo_db_helpers import update_exists, get_standup_updates_by_user_id, get_messages_from_db
+from helpers.llm_helpers import llm, convert_conversation_history_to_langchain_messages
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.messages.system import SystemMessage
 import json
 
-def _convert_slack_history_to_messages(conversation_history):
-    messages = []
-    for message in conversation_history:
-        if message.get('bot_id'):
-            print("bot message ", message)
-            messages.append(AIMessage(content=message['text']))
-        else:
-            messages.append(HumanMessage(content=message['text']))
-    return messages
-
 def reply(channel_id, user_id, message) -> str:
     # Get conversation history and convert to langchain messages
-    conversation_history = fetch_conversation_history(channel_id)
-    chat_history = _convert_slack_history_to_messages(conversation_history)
-
-    print("chat history")
-    print(chat_history)
+    # conversation_history = fetch_conversation_history(channel_id, max_number_of_messages_to_fetch=6)
+    conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=4)
+    langchain_messages = convert_conversation_history_to_langchain_messages(conversation_history)
     
     # Check if update exists and get appropriate prompt
     has_update = update_exists(user_id)
@@ -29,6 +16,8 @@ def reply(channel_id, user_id, message) -> str:
     
     if has_update:
         update_data = get_standup_updates_by_user_id(user_id)
+
+        print("update data from reply agent is: ", update_data)
         
         system_prompt = f"""
         You are a project manager that responds to standup updates from developers.
@@ -58,7 +47,7 @@ def reply(channel_id, user_id, message) -> str:
     # Combine system prompt with chat history and current message
     messages = [
         SystemMessage(content=system_prompt),
-        *chat_history,
+        *langchain_messages,
         HumanMessage(content=message)
     ]
     

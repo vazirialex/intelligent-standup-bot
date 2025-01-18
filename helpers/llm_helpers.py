@@ -1,13 +1,13 @@
 from langchain_core.prompts.chat import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-import requests
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages.system import SystemMessage
 from dotenv import find_dotenv, load_dotenv
 import os
 import json
 from typing import List, Any
-from models import StandupUpdate
-from .mongo_db_helpers import get_standup_updates_by_user_id
+from .mongo_db_helpers import get_standup_updates_by_user_id, get_messages_from_db
 
 load_dotenv(find_dotenv())
 
@@ -33,7 +33,7 @@ def create_standup_update(text: str, user_id: str) -> dict:
     Given a user's standup update, extract the key insights from the update if the update has sufficient information to craft a response.
     """
     messages = [
-        ( "system",
+        SystemMessage(
             """
             You are a project manager that listens to standup updates from developers and extracts their key insights.
                 
@@ -76,9 +76,8 @@ def create_standup_update(text: str, user_id: str) -> dict:
             }}
             """
         ),
-        (
-            "human",
-            """
+        HumanMessage(content=
+            f"""
             My user id is {user_id}
 
             My response is {text}
@@ -90,17 +89,18 @@ def create_standup_update(text: str, user_id: str) -> dict:
     response = llm.invoke(formatted_prompt)
     return json.loads(response.content)
 
-def make_edits_to_update(update_exists: bool, text: str, user_id: str) -> dict:
+def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_id: str) -> dict:
     """
-    Given an update and a user's reply, make edits to the user's standup update.
+    Given an update and a user's reply, make edits to the user's standup update based on the conversation history and the user's reply.
     """
     update = get_standup_updates_by_user_id(user_id) if update_exists else False
     if not update:
         print("make edits to update called but no update exists")
-        return insufficient_information_response(text)
+        return insufficient_information_response(user_id, channel_id, text)
+    chat_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)
+    formatted_chat_history = convert_conversation_history_to_langchain_messages(chat_history)
     messages = [
-        (
-            "system",
+        SystemMessage(
             """
             You are a project manager that listens to standup updates from developers and makes edits to their updates.
                 
@@ -112,6 +112,7 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str) -> dict:
             3. Add or remove any information that you deem necessary given the user's reply.
             4. Valid statuses are NOT_STARTED, IN_PROGRESS, REJECTED, COMPLETED, BLOCKED. Use your best judgment to determine the status.
             5. Return the response in JSON format, following the same structure as the update provided below.
+            6. Do not make up any information or tasks. Only make edits to the information provided.
 
             START EXAMPLE:
             INPUT
@@ -129,12 +130,8 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str) -> dict:
             Remember to ensure the response is in JSON format and do not format it with ```json.
             """
         ),
-        (
-            "human",
-            """
-            {text}
-            """
-        )
+        *formatted_chat_history,
+        HumanMessage(content=text)
     ]
     prompt = ChatPromptTemplate.from_messages(messages)
     formatted_prompt = prompt.format(update=update, user_id=user_id, text=text)
@@ -144,35 +141,48 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str) -> dict:
     print()
     return json.loads(response.content)
 
-def insufficient_information_response(conversation_history: str) -> str:
+def insufficient_information_response(user_id: str, channel_id: str, message: str) -> str:
     """
     Responds to a user when their standup update is missing information, is vague or unclear, or if you need more details to understand the update.
     """
-    formatted_conversation_history = format_conversation_history(conversation_history)
-    template = [
-        (
-            "system",
+    # conversation_history = fetch_conversation_history(channel_id, max_number_of_messages_to_fetch=6)
+    conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)
+    formatted_conversation_history = convert_conversation_history_to_langchain_messages(conversation_history)
+    messages = [
+        SystemMessage(
             """
             You are a project manager whose goal is to read a standup update from a software developer and respond to the message in a professional manner.
             For example, if the user says "Can you update task-1 and task-2", you should respond with "Can you provide more details about the status of task-1 and task-2?"
-            
+
+            You will be provided a conversation history of the user, their most recent message, and their standup update conversation thus far. 
+            You should respond to the user asking the information you would need for a sufficient standup update.
+
             You may use your own judgment, but please respond to the user asking the information you would need for a sufficient standup update. Keep your response concise and to the point.
             """
-        )
+        ),
+        *formatted_conversation_history,
+        HumanMessage(content=message)
     ]
-    prompt = ChatPromptTemplate(messages=messages)
-    formatted_prompt = prompt.format(formatted_conversation_history=formatted_conversation_history)
-    response = llm.invoke(formatted_prompt)
+    response = llm.invoke(messages)
     return response.content
 
-def format_conversation_history(messages: List[Any]) -> str:
-    formatted_messages = []
-    messages = sorted(messages, key=lambda m: m["ts"])
-    for message in messages:
-        user = message['user']
-        text = message['text']
-        formatted_messages.append(f"{user}: {text}")
-    return "\n".join(formatted_messages)
+def convert_slack_history_to_langchain_messages(slack_conversation_history):
+    messages = []
+    for message in slack_conversation_history:
+        if message.get('bot_id'):
+            messages.append(AIMessage(content=message['text']))
+        else:
+            messages.append(HumanMessage(content=message['text']))
+    return messages
+
+def convert_conversation_history_to_langchain_messages(conversation_history):
+    messages = []
+    for message in conversation_history:
+        if message.get('is_bot'):
+            messages.append(AIMessage(content=message['message']))
+        else:
+            messages.append(HumanMessage(content=message['message']))
+    return messages
 
 def _split_conversation_history(conversation_history: List[str]):
     bot_messages = []
