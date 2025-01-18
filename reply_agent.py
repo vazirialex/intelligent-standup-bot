@@ -26,13 +26,13 @@ def reply(channel_id, user_id, message, used_tool) -> str:
         The developer has provided their update in the following format:
         {update_data['updates']['updates']}
         
-        Please format this update into a well-structured Slack message using markdown.
+        Please format this update into a well-structured Slack message.
         Write your response such that it follows the developer's preferred writing style: {update_data['updates']['preferred_style']}.
         
         For tasks that are BLOCKED, make sure to highlight the blockers clearly.
-        Use appropriate markdown formatting to make the message easy to read and include emojis for each task's status.
+        Use appropriate formatting for a clean slack message to make the message easy to read and include emojis for each task's status.
 
-        Only reply with the relevant information. Do not include any other information.
+        Reply with a brief and courteous message to the user followed by the formatted update.
         """
     else:
         system_prompt = """
@@ -41,7 +41,7 @@ def reply(channel_id, user_id, message, used_tool) -> str:
         No standup update has been provided for this conversation.
         
         Please engage with the developer based on their message and the conversation history.
-        Use appropriate markdown formatting in your response.
+        Use appropriate formatting for a slack message in your response and include emojis where appropriate.
         """
     
     # Combine system prompt with chat history and current message

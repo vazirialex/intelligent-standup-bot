@@ -60,8 +60,6 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
     # """.format(channel_id=channel_id, user_id=user_id, message=message, update_exists="Yes, an update exists" if has_update else "No update exists")
     tool_response = agent.invoke(tool_prompt)
 
-    print("number of tool calls: ", len(tool_response.tool_calls))
-
     def execute_tool_call(tool_response):
         messages = []
         tool_name = None
