@@ -7,7 +7,6 @@ class UpdateItem(BaseModel):
     status: str
     identified_blockers: List[str]
 
-@dataclass
 class StandupUpdate(BaseModel):
     preferred_style: str
     updates: List[UpdateItem]

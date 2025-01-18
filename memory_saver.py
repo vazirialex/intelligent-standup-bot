@@ -1,12 +1,15 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
+from langchain_core.messages import HumanMessage
+from .reply_agent import reply_agent
 
 workflow = StateGraph(state_schema=MessagesState)
 
 
+
 # Define the function that calls the model
 def call_model(state: MessagesState):
-    response = llm.invoke(state["messages"])
+    response = reply_agent.invoke(state["messages"])
     # Update message history with response:
     return {"messages": response}
 
