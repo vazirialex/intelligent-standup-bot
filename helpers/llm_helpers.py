@@ -9,24 +9,25 @@ from typing import List, Any
 from models import StandupUpdate
 
 load_dotenv(find_dotenv())
-# llm = ChatOpenAI(
-#     model="gpt-4o-mini",
-#     temperature=0,
-#     max_tokens=None,
-#     timeout=None,
-#     max_retries=2,
-#     api_key=os.environ["OPENAI_API_KEY"]
-# )
 
-llm = ChatAnthropic(
-    model="claude-3-5-sonnet-20240620",
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
     temperature=0,
-    max_tokens=1024,
+    max_tokens=None,
     timeout=None,
-    max_retries=2
+    max_retries=2,
+    api_key=os.environ["OPENAI_API_KEY"]
 )
 
-def create_standup_update(text: str) -> StandupUpdate:
+# llm = ChatAnthropic(
+#     model="claude-3-5-sonnet-20240620",
+#     temperature=0,
+#     max_tokens=1024,
+#     timeout=None,
+#     max_retries=2
+# )
+
+def create_standup_update(text: str, user_id: str) -> StandupUpdate:
     """
     Given a user's standup update, extract the key insights from the update if the update has sufficient information to craft a response.
     """
@@ -76,15 +77,20 @@ def create_standup_update(text: str) -> StandupUpdate:
         ),
         (
             "human",
-            "{text}"
+            """
+            My user id is {user_id}
+
+            My response is {text}
+            """
         )
     ]
     prompt = ChatPromptTemplate.from_messages(messages)
-    formatted_prompt = prompt.format(text=text)
+    formatted_prompt = prompt.format(user_id=user_id, text=text)
     response = llm.invoke(formatted_prompt)
+    print("Response from LLM: ", response)
     return StandupUpdate.model_validate_json(response.content)
 
-def make_edits_to_update(update: str, text: str):
+def make_edits_to_update(update: str, text: str, user_id: str) -> StandupUpdate:
     """
     Given an update and a user's reply, make edits to the user's standup update.
     """
@@ -117,11 +123,15 @@ def make_edits_to_update(update: str, text: str):
         ),
         (
             "human",
-            "{text}"
+            """
+            My user id is {user_id}
+
+            My response is {text}
+            """
         )
     ]
     prompt = ChatPromptTemplate.from_messages(messages)
-    formatted_prompt = prompt.format(update=update, text=text)
+    formatted_prompt = prompt.format(update=update, user_id=user_id, text=text)
     response = llm.invoke(formatted_prompt)
     return StandupUpdate.model_validate_json(response.content)
 

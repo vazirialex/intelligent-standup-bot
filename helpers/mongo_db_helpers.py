@@ -1,18 +1,24 @@
 from pymongo import MongoClient
+from datetime import datetime
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["standup_db"]
 updates_collection = db["daily_updates"]
 
-def get_updates_by_id(user_id: str):
-    updates = list(updates_collection.find({"user_id": user_id}, {"_id": 0}))
+def get_standup_updates_by_user_id(user_id: str, date = None):
+    """
+    Get standup updates for a user on a given date
+    """
+    db_query = {"user_id": user_id, "date": date} if date else {"user_id": user_id}
+    updates = list(updates_collection.find(db_query, {"_id": 0}))
+    print(updates)
     if updates:
         return updates
     raise HTTPException(status_code=404, detail="No updates found for user")
 
 def insert_item(user_id, extracted_updates):
     now = datetime.now()
-    date = datetime.strptime(now, "%Y-%m-%d")
+    date = now.strftime("%Y-%m-%d")
     updates_collection.insert_one({
         "user_id": user_id,
         "updates": extracted_updates,
@@ -20,8 +26,11 @@ def insert_item(user_id, extracted_updates):
         "update_time": now
     })
 
-def update_exists(user_id, date = None):
-    desired_date = datetime.strptime(date, "%Y-%m-%d") if date else datetime.strptime(datetime.now(), "%Y-%m-%d")
+def update_exists(user_id, date = None) -> bool:
+    """
+    Check if an update exists in our DB for a user on a given date
+    """
+    desired_date = datetime.strptime(date, "%Y-%m-%d") if date else datetime.now().strftime("%Y-%m-%d")
     return updates_collection.find_one({"user_id": user_id, "date": desired_date}) is not None
 
 def update_item(user_id, extracted_updates):
@@ -33,7 +42,7 @@ def update_item(user_id, extracted_updates):
     )
 
 def delete_item(user_id, date = None):
-    desired_date = datetime.strptime(date, "%Y-%m-%d") if date else datetime.strptime(datetime.now(), "%Y-%m-%d")
+    desired_date = datetime.strptime(date, "%Y-%m-%d") if date else datetime.now().strftime("%Y-%m-%d")
     updates_collection.delete_one({"user_id": user_id, "date": desired_date})
 
 def persist_scheduled_message(user_id, message, scheduled_time):
