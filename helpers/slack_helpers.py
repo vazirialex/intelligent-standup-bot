@@ -36,13 +36,12 @@ def fetch_conversation_history(channel_id, date=None):
     try:
         response = slack_client.conversations_history(channel=channel_id)
         messages = response["messages"]
-        epoch_milli = int(datetime.strptime(date, "%Y-%m-%d").timestamp()) * 1000
-        if date:
-            messages = [msg for msg in messages if float(msg["ts"]) >= epoch_milli]
-        return messages
+        target_date = datetime.strptime(date, "%Y-%m-%d") if date else datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_timestamp = target_date.timestamp()
+        return [msg for msg in messages if float(msg["ts"]) >= start_timestamp]
     except SlackApiError as e:
         print(f"Error fetching conversation history: {e.response['error']}")
-        raise e
+        return []
 
 async def send_standup_messages():
     users = _get_all_users()

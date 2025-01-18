@@ -11,20 +11,23 @@ def get_standup_updates_by_user_id(user_id: str, date = None):
     """
     db_query = {"user_id": user_id, "date": date} if date else {"user_id": user_id}
     updates = list(updates_collection.find(db_query, {"_id": 0}))
-    print(updates)
     if updates:
-        return updates
-    raise HTTPException(status_code=404, detail="No updates found for user")
+        return updates[0]
+    raise Exception("No updates found for user")
 
 def insert_item(user_id, extracted_updates):
     now = datetime.now()
     date = now.strftime("%Y-%m-%d")
-    updates_collection.insert_one({
-        "user_id": user_id,
-        "updates": extracted_updates,
-        "date": date,
-        "update_time": now
-    })
+    if update_exists(user_id):
+        print("Update exists already")
+        update_item(user_id, extracted_updates)
+    else:
+        updates_collection.insert_one({
+            "user_id": user_id,
+            "updates": extracted_updates,
+            "date": date,
+            "update_time": now
+        })
 
 def update_exists(user_id, date = None) -> bool:
     """
@@ -35,7 +38,7 @@ def update_exists(user_id, date = None) -> bool:
 
 def update_item(user_id, extracted_updates):
     now = datetime.now()
-    date = datetime.strptime(now, "%Y-%m-%d")
+    date = now.strftime("%Y-%m-%d")
     updates_collection.update_one(
         {"user_id": user_id, "date": date},
         {"$set": {"updates": extracted_updates, "update_time": now}}
