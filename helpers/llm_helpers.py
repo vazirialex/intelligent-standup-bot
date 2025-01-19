@@ -8,6 +8,7 @@ import os
 import json
 from typing import List, Any
 from .mongo_db_helpers import get_standup_updates_by_user_id, get_messages_from_db
+from .github_helpers import get_github_activity
 
 load_dotenv(find_dotenv())
 
@@ -28,9 +29,10 @@ llm = ChatOpenAI(
 #     max_retries=2
 # )
 
-def create_standup_update(text: str, user_id: str) -> dict:
+def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
     """
-    Given a user's standup update, extract the key insights from the update if the update has sufficient information to craft a response. 
+    Given a user's standup update and conversation history, extract the key insights from the update if the update has sufficient information.
+    Uses the conversation history if needed to piece together the user's standup update.
     Only use this tool if there is no update already in the database.
     """
     messages = [
@@ -43,6 +45,7 @@ def create_standup_update(text: str, user_id: str) -> dict:
             Here are some important rules to follow:
             1. Identify the ticket number and status update. The status should be one of NOT_STARTED, IN_PROGRESS, REJECTED, COMPLETED, OR BLOCKED. Use your best judgment to determine the status.
             2. Identify the user's writing style and tone and summarize it in one word (e.g. Paragraph, Bullet points, etc.)
+            3. You are given conversation history between you and the user. Use this conversation history to determine if the user has provided sufficient information to craft a response.
             3. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
 
             Example:
@@ -78,6 +81,9 @@ def create_standup_update(text: str, user_id: str) -> dict:
             """
         ),
         # TODO: add conversation history if the user does not have an update in the database
+        *convert_conversation_history_to_langchain_messages(
+            get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=6)
+        ),
         HumanMessage(content=
             f"""
             My user id is {user_id}
@@ -198,6 +204,9 @@ def friendly_conversation_response(user_id: str, channel_id: str, message: str) 
     return response.content
 
 def convert_slack_history_to_langchain_messages(slack_conversation_history):
+    """
+    DO NOT USE THIS FUNCTION.
+    """
     messages = []
     for message in slack_conversation_history:
         if message.get('bot_id'):
@@ -215,10 +224,12 @@ def convert_conversation_history_to_langchain_messages(conversation_history):
             messages.append(HumanMessage(content=message['message']))
     return messages
 
-def derive_standup_message(user_id: str, channel_id: str, text: str) -> str:
+def derive_standup_message(user_id: str) -> str:
     """
     Uses github and linear to generate a well-formatted standup message for a user.
     """
+    github_activity = get_github_activity(user_id)
+    previous_standup_update = get_standup_updates_by_user_id(user_id)
     # TODO: FINISH THIS
     prompt_with_github_activity = """
             You are a project manager whose job is to generate a well-formatted standup message in slack for a software developer given their github activity and previous standup updates.
@@ -253,7 +264,7 @@ def derive_standup_message(user_id: str, channel_id: str, text: str) -> str:
             {previous_standup_update}
 
             Please craft a well-formatted standup message after analyzing the github activity and previous standup update carefully.
-            """
+            """.format(github_activity=github_activity, previous_standup_update=previous_standup_update)
         )
     ]
     response = llm.invoke(messages)

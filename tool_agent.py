@@ -36,7 +36,6 @@ agent = llm.bind_tools(tools)
 def execute_agent_with_user_context(message: str, user_id: str, channel_id: str):
     has_update = update_exists(user_id)
     print("has_update: ", has_update)
-    # TODO: refine this prompt to provide more context about when to use which tool
     tool_prompt = """
     You are a project manager that helps developers with their standup updates. You are given a set of tools to use to help you reply to the user's standup update.
 

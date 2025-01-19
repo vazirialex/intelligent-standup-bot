@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from dotenv import find_dotenv, load_dotenv
 import os
 from .mongo_db_helpers import insert_item, persist_scheduled_message, standup_message_sent
-from .github_helpers import get_github_activity
 from .llm_helpers import derive_standup_message
 
 load_dotenv(find_dotenv())
@@ -39,8 +38,7 @@ async def send_standup_messages():
     timestamp = int(next_9_am.timestamp())
     for user_id in users:
         try:
-            github_activity = get_github_activity(user_id)
-            standup_message = derive_standup_message(user_id, user_id, github_activity)
+            standup_message = derive_standup_message(user_id)
             text = standup_message
             if now.hour >= 9 and not standup_message_sent(user_id, now):
                 slack_client.chat_postMessage(
