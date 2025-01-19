@@ -34,7 +34,7 @@ tools = [
 agent = llm.bind_tools(tools)
 
 def execute_agent_with_user_context(message: str, user_id: str, channel_id: str):
-    has_update = update_exists(user_id)
+    has_update = update_exists(user_id) and get_standup_update_by_user_id_tool(user_id)["updates"] # need to check if the update is not empty in case we need to insert an empty update for the day
     print("has_update: ", has_update)
     tool_prompt = """
     You are a project manager that helps developers with their standup updates. You are given a set of tools to use to help you reply to the user's standup update.
@@ -75,4 +75,7 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
     if used_tool in ["create_standup_update", "make_edits_to_update"]:
         # insert standup update to standup collection
         insert_item(user_id, agent_response)
+    if used_tool == "friendly_conversation" and not has_update:
+        # add empty update to the standup collection in case the conversation ends here and no update has been created
+        insert_item(user_id, {"updates": [], "preferred_style": "Paragraph"})
     return agent_response, used_tool
