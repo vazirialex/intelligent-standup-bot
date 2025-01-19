@@ -1,9 +1,4 @@
-from typing import Optional, Type
 from langchain_core.tools.structured import StructuredTool
-from langchain_core.prompt_values import ChatPromptValue
-from langchain_core.messages.chat import ChatMessage
-from langchain_core.messages import HumanMessage, AIMessage
-from pydantic import BaseModel, Field
 from helpers.llm_helpers import llm, ask_question_response, create_standup_update, make_edits_to_update, friendly_conversation_response
 from helpers.mongo_db_helpers import insert_item, update_exists, get_standup_updates_by_user_id
 
@@ -34,7 +29,7 @@ tools = [
 agent = llm.bind_tools(tools)
 
 def execute_agent_with_user_context(message: str, user_id: str, channel_id: str):
-    has_update = update_exists(user_id) and get_standup_update_by_user_id_tool(user_id)["updates"] # need to check if the update is not empty in case we need to insert an empty update for the day
+    has_update = update_exists(user_id) and get_standup_updates_by_user_id(user_id)["updates"] # need to check if the update is not empty in case we need to insert an empty update for the day
     print("has_update: ", has_update)
     tool_prompt = """
     You are a project manager that helps developers with their standup updates. You are given a set of tools to use to help you reply to the user's standup update.
