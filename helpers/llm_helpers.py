@@ -77,6 +77,7 @@ def create_standup_update(text: str, user_id: str) -> dict:
             }}
             """
         ),
+        # TODO: add conversation history if the user does not have an update in the database
         HumanMessage(content=
             f"""
             My user id is {user_id}
@@ -146,7 +147,6 @@ def ask_question_response(user_id: str, channel_id: str, message: str) -> str:
     """
     Responds to the user with appropriate clarifying questions when their standup update is missing information, is vague or unclear, or if more details are needed to understand the update.
     """
-    # conversation_history = fetch_conversation_history(channel_id, max_number_of_messages_to_fetch=6)
     conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=6)
     formatted_conversation_history = convert_conversation_history_to_langchain_messages(conversation_history)
     messages = [
@@ -177,7 +177,6 @@ def friendly_conversation_response(user_id: str, channel_id: str, message: str) 
     """
     Responds to generic messages from the user that are not standup updates, such as common replies that end a conversation.
     """
-    # conversation_history = fetch_conversation_history(channel_id, max_number_of_messages_to_fetch=6)
     conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)
     formatted_conversation_history = convert_conversation_history_to_langchain_messages(conversation_history)
     messages = [
@@ -216,12 +215,46 @@ def convert_conversation_history_to_langchain_messages(conversation_history):
             messages.append(HumanMessage(content=message['message']))
     return messages
 
-def _split_conversation_history(conversation_history: List[str]):
-    bot_messages = []
-    human_messages = []
-    for message in conversation_history:
-        if message["user"] == "system":
-            bot_messages.append(message["text"])
-        else:
-            human_messages.append(message["text"])
-    return bot_messages, human_messages
+def derive_standup_message(user_id: str, channel_id: str, text: str) -> str:
+    """
+    Uses github and linear to generate a well-formatted standup message for a user.
+    """
+    # TODO: FINISH THIS
+    prompt_with_github_activity = """
+            You are a project manager whose job is to generate a well-formatted standup message in slack for a software developer given their github activity and previous standup updates.
+
+            Here are some important things to keep in mind when crafting the standup message:
+            1. The message should be well-formatted and easy to read. You are sending a message in slack, so use emojis and formatting to make the message more readable.
+            2. Find trends in the github activity and ask if anything needs to be escalated. For example, if the user has made few commits over the past few days, ask if there are any blockers. Or, if a PR is left open for a couple of days, ask if the developer needs help getting it merged.
+
+            Here is the github activity:
+            {github_activity}
+
+            Here is the previous standup update:
+            {previous_standup_update}
+
+            Please craft a well-formatted standup message after analyzing the github activity and previous standup update carefully.
+            """
+
+    messages = [
+        SystemMessage(
+            """
+            You are a project manager whose job is to generate a well-formatted standup message in slack for a software developer given their github activity and previous standup updates.
+
+            Here are some important things to keep in mind when crafting the standup message:
+            1. The message should be well-formatted and easy to read. You are sending a message in slack, so use emojis and formatting to make the message more readable.
+            2. Find trends in the github activity and ask if anything needs to be escalated. For example, if the user has made few commits over the past few days, ask if there are any blockers. Or, if a PR is left open for a couple of days, ask if the developer needs help getting it merged.
+            3. 
+
+            Here is the github activity:
+            {github_activity}
+
+            Here is the previous standup update:
+            {previous_standup_update}
+
+            Please craft a well-formatted standup message after analyzing the github activity and previous standup update carefully.
+            """
+        )
+    ]
+    response = llm.invoke(messages)
+    return response.content

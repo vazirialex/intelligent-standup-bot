@@ -1,48 +1,95 @@
-from fastapi import FastAPI, HTTPException
-from contextlib import asynccontextmanager
-from pymongo import MongoClient
-from langchain_core.prompts.chat import ChatPromptTemplate
-from langchain_openai import OpenAI
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-import requests
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-import time
-from datetime import datetime, timedelta, UTC
-from dotenv import find_dotenv, load_dotenv
 import os
-import pytz
+from datetime import datetime, timedelta
+import requests
+from urllib.parse import urlencode
+from dotenv import load_dotenv, find_dotenv
+from .mongo_db_helpers import get_github_token
 
 load_dotenv(find_dotenv())
 
-github_api_base_url = "https://api.github.com"
-github_token = os.environ["GITHUB_TOKEN"]
-github_headers = {
-    "Authorization": f"Bearer {github_token}",
-    "Accept": "application/vnd.github+json",
-}
+GITHUB_CLIENT_ID = os.environ["GITHUB_CLIENT_ID"]
+GITHUB_REDIRECT_URI = os.environ["GITHUB_REDIRECT_URI"]
 
-def _slack_user_id_to_github_username(user_id):
-    # Placeholder for actual mapping logic
-    mapping = {"U123456": "github_user1", "U654321": "github_user2"}
-    return mapping.get(user_id, "unknown")
+def generate_github_oauth_url(state, channel_id):
+    """Generate GitHub OAuth URL with state parameter."""
+    params = {
+        'client_id': GITHUB_CLIENT_ID,
+        'redirect_uri': GITHUB_REDIRECT_URI,
+        'scope': 'repo user',
+        'state': state,
+        'channel_id': channel_id
+    }
+    return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
-def fetch_github_activity(user_id):
-    # Map Slack user IDs to GitHub usernames (custom mapping needed)
-    github_username = _slack_user_id_to_github_username(user_id)
-    pst_timezone = pytz.timezone('America/Los_Angeles')
-    now_utc = datetime.now(UTC)
-    now_pst = now_utc.astimezone(pst_timezone)
-    since = (now_pst - timedelta(days=1)).isoformat() + "Z"
-    print(f"Fetching GitHub activity for {github_username} since {since}")
-    response = requests.get(
-        f"{github_api_base_url}/users/{github_username}/events",
-        headers=github_headers,
-        params={"since": since},
-    )
-
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return "No activity or unable to fetch."
+def get_github_activity(slack_user_id):
+    """Get GitHub activity for a connected user."""
+    github_token = get_github_token(slack_user_id)
+    if not github_token:
+        return "GitHub account not connected. Use /connect-github to connect your account."
+    
+    headers = {
+        'Authorization': f'token {github_token}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    
+    # Get user information
+    user_response = requests.get('https://api.github.com/user', headers=headers)
+    if user_response.status_code != 200:
+        return "Error accessing GitHub account"
+    
+    user_data = user_response.json()
+    username = user_data['login']
+    
+    # Get user's repositories
+    repos_response = requests.get('https://api.github.com/user/repos', headers=headers)
+    if repos_response.status_code != 200:
+        return "Error accessing repositories"
+    
+    recent_commits = []
+    recent_prs = []
+    since_date = (datetime.now() - timedelta(days=1)).isoformat()
+    
+    for repo in repos_response.json():
+        repo_name = repo['name']
+        repo_full_name = repo['full_name']
+        
+        # Get commits
+        commits_url = f'https://api.github.com/repos/{repo_full_name}/commits'
+        commits_params = {
+            'author': username,
+            'since': since_date
+        }
+        commits_response = requests.get(commits_url, headers=headers, params=commits_params)
+        
+        if commits_response.status_code == 200:
+            for commit in commits_response.json():
+                recent_commits.append({
+                    'repo': repo_name,
+                    'message': commit['commit']['message'],
+                    'timestamp': commit['commit']['author']['date']
+                })
+        
+        # Get PRs
+        prs_url = f'https://api.github.com/repos/{repo_full_name}/pulls'
+        prs_params = {
+            'state': 'all',
+            'sort': 'updated',
+            'direction': 'desc'
+        }
+        prs_response = requests.get(prs_url, headers=headers, params=prs_params)
+        
+        if prs_response.status_code == 200:
+            for pr in prs_response.json():
+                pr_updated = datetime.strptime(pr['updated_at'], '%Y-%m-%dT%H:%M:%SZ')
+                if pr_updated > datetime.now() - timedelta(days=1):
+                    recent_prs.append({
+                        'repo': repo_name,
+                        'title': pr['title'],
+                        'state': pr['state'],
+                        'url': pr['html_url']
+                    })
+    
+    return {
+        'commits': recent_commits,
+        'pull_requests': recent_prs
+    }

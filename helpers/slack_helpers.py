@@ -1,21 +1,11 @@
-from fastapi import FastAPI, HTTPException
-from contextlib import asynccontextmanager
-from pymongo import MongoClient
-from langchain_core.prompts.chat import ChatPromptTemplate
-from langchain_openai import OpenAI
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-import requests
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-import time
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta
 from dotenv import find_dotenv, load_dotenv
 import os
-import pytz
-from .github_helpers import fetch_github_activity
 from .mongo_db_helpers import insert_item, persist_scheduled_message, standup_message_sent
-
+from .github_helpers import get_github_activity
+from .llm_helpers import derive_standup_message
 
 load_dotenv(find_dotenv())
 
@@ -37,7 +27,6 @@ def fetch_conversation_history(channel_id, date=None, max_number_of_messages_to_
         messages = response["messages"]
         target_date = datetime.strptime(date, "%Y-%m-%d") if date else datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         start_timestamp = target_date.timestamp()
-        print("messages are: ", messages)
         return [msg for msg in messages if float(msg["ts"]) >= start_timestamp][:max_number_of_messages_to_fetch]
     except SlackApiError as e:
         print(f"Error fetching conversation history: {e.response['error']}")
@@ -50,15 +39,9 @@ async def send_standup_messages():
     timestamp = int(next_9_am.timestamp())
     for user_id in users:
         try:
-            # Fetch GitHub activity
-            # github_activity = fetch_github_activity(user_id)
-            # linear_tasks = fetch_linear_tasks(user_id)
-            github_activity = [
-                {"type": "PushEvent", "repo": "repo1", "created_at": "2022-01-01T00:00:00Z", "commit": "123"}, 
-                {"type": "PullRequestEvent", "repo": "repo2", "created_at": "2022-01-01T00:00:00Z", "pull_request": "456"}
-            ]
-            # Send a scheduled message to the user at 9 AM the next day unless it's already past 9 AM on the current day and no message has been sent yet.
-            text = "Good morning! Here's your GitHub activity from the past 24 hours: {github_activity}. Please reply with your standup update."
+            github_activity = get_github_activity(user_id)
+            standup_message = derive_standup_message(user_id, user_id, github_activity)
+            text = standup_message
             if now.hour >= 9 and not standup_message_sent(user_id, now):
                 slack_client.chat_postMessage(
                     channel=user_id,
@@ -73,3 +56,10 @@ async def send_standup_messages():
             persist_scheduled_message(user_id, text, now)
         except SlackApiError as e:
             print(f"Error sending message to {user_id}: {e.response['error']}")
+
+def send_github_oauth_message(channel_id, user_id):
+    slack_client.chat_postMessage(
+        channel=channel_id,
+        user=user_id,
+        text="Successfully connected your GitHub account! :white_check_mark:"
+    )

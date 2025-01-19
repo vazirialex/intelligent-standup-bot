@@ -5,6 +5,7 @@ client = MongoClient("mongodb://localhost:27017/")
 db = client["standup_db"]
 updates_collection = db["daily_updates"]
 messages_collection = db["messages"]
+github_tokens_collection = db["github_tokens"]
 
 def get_standup_updates_by_user_id(user_id: str, date = None):
     """
@@ -69,4 +70,22 @@ def get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=10
     print("slack messages from db: ", result)
     return result
 
+def save_github_token(slack_user_id: str, github_token: str):
+    """Store or update a GitHub token for a Slack user"""
+    github_tokens_collection.update_one(
+        {"slack_user_id": slack_user_id},
+        {"$set": {
+            "github_token": github_token,
+            "updated_at": datetime.now()
+        }},
+        upsert=True
+    )
 
+def get_github_token(slack_user_id: str) -> str:
+    """Retrieve a GitHub token for a Slack user"""
+    token_doc = github_tokens_collection.find_one({"slack_user_id": slack_user_id})
+    return token_doc["github_token"] if token_doc else None
+
+def delete_github_token(slack_user_id: str):
+    """Remove a GitHub token for a Slack user"""
+    github_tokens_collection.delete_one({"slack_user_id": slack_user_id})

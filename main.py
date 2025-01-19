@@ -1,23 +1,14 @@
-from fastapi import FastAPI, HTTPException
-from contextlib import asynccontextmanager
-from pymongo import MongoClient
-from langchain_core.prompts.chat import ChatPromptTemplate
-from langchain_openai import OpenAI
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-import requests
-import schedule
-import time
-from datetime import datetime, timedelta, UTC
 from dotenv import find_dotenv, load_dotenv
 import os
-import pytz
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import helpers.slack_helpers as slack_helpers
-from helpers.mongo_db_helpers import get_standup_updates_by_user_id, delete_item, save_message_to_db
+from helpers.mongo_db_helpers import get_standup_updates_by_user_id, delete_item, save_message_to_db, delete_github_token
+from helpers.github_helpers import generate_github_oauth_url, get_github_activity
 from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
-from tool_agent import agent, execute_agent_with_user_context
+from tool_agent import execute_agent_with_user_context
 from reply_agent import reply
+from github_oauth_connection import GitHubCallbackHandler
 
 load_dotenv(find_dotenv())
 
@@ -34,12 +25,6 @@ async def respond_to_message(message, say):
     save_message_to_db(message["user"], reply_agent_response, message["channel"], True)
     await say(text=reply_agent_response)
 
-@app.action("button_click")
-async def action_button_click(body, ack, say):
-    # Acknowledge the action
-    ack()
-    await say(f"<@{body['user']['id']}> clicked the button")
-
 @app.command("/get_updates")
 async def get_updates(ack, body):
     ack()
@@ -47,8 +32,8 @@ async def get_updates(ack, body):
     updates = await get_standup_updates_by_user_id(user_id)
     return updates
 
-@app.command("/delete")
-async def delete(ack, body):
+@app.command("/delete-standup-update")
+async def delete_standup_update(ack, body):
     try:
         ack()
         await delete_item(body["user_id"], body["text"])
@@ -56,6 +41,79 @@ async def delete(ack, body):
     except Exception as e:
         print(e)
         return "Sorry, we weren't able to delete the updates."
+
+@app.command("/connect-github")
+async def connect_github(ack, body, say):
+    """Slack command to initiate GitHub connection."""
+    await ack()
+    
+    # Use Slack user ID as state parameter
+    state = body["user_id"]
+    channel_id = body["channel_id"]
+    oauth_url = generate_github_oauth_url(state, channel_id)
+    
+    # Send ephemeral message with OAuth link
+    await say({
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "Click the button below to connect your GitHub account:"
+                }
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Connect GitHub"
+                        },
+                        "url": oauth_url,
+                        "style": "primary"
+                    }
+                ]
+            }
+        ],
+        "response_type": "ephemeral"
+    })
+
+@app.command("/standup")
+async def handle_standup_command(ack, respond, command):
+    await ack()
+    slack_user_id = command['user_id']
+    
+    # Get GitHub activity
+    github_data = get_github_activity(slack_user_id)
+    
+    if isinstance(github_data, str):
+        # User needs to connect GitHub
+        await respond(github_data)
+        return
+    
+    # Format activity for standup context
+    activity_summary = "Here's your GitHub activity from the past 24 hours:\n"
+    if github_data['commits']:
+        activity_summary += "\nCommits:\n" + "\n".join([
+            f"- [{c['repo']}] {c['message']}" for c in github_data['commits']
+        ])
+    if github_data['pull_requests']:
+        activity_summary += "\nPull Requests:\n" + "\n".join([
+            f"- [{pr['repo']}] {pr['title']} ({pr['state']})" for pr in github_data['pull_requests']
+        ])
+    
+    activity_summary += "\n\nPlease reply with your standup update."
+    
+    await respond(activity_summary)
+
+@app.command("/github-logout")
+async def github_logout(ack, body, say):
+    await ack()
+    #delete the github token from the database
+    delete_github_token(body["user_id"])
+    await say("Logged out of GitHub")
 
 async def schedule_standup_message():
     num_seconds_in_one_day = 86400
@@ -68,6 +126,14 @@ async def main():
     handler = AsyncSocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     await handler.start_async()
 
+def run_http_server():
+    """Run the HTTP server for GitHub callbacks."""
+    server = HTTPServer(('localhost', 3000), GitHubCallbackHandler)
+    server.serve_forever()
+
 if __name__ == "__main__":
     import asyncio
+    import threading
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
     asyncio.run(main())
