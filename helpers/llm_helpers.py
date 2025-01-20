@@ -120,9 +120,9 @@ def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
 
 def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_id: str) -> dict:
     """
-    Given an update and a user's reply, make edits to the user's standup update based on the conversation history and the user's reply. Only make edits if there is sufficient information to make edits.
+    Make edits to the user's standup update based on the conversation history and the user's reply. Uses conversation history to make inferences on the user's desired updates. Only make edits if there is sufficient information to make edits.
     """
-    update = get_standup_updates_by_user_id(user_id) if update_exists else False
+    update = get_standup_updates_by_user_id(user_id)[0]["updates"] if update_exists else False
     if not update:
         print("make edits to update called but no update exists")
         return ask_question_response(user_id, channel_id, text)
@@ -185,7 +185,7 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_i
         {update}
 
         Remember to ensure the response is in JSON format and do not format it with ```json.
-        """
+        """.format(update=update)
     messages = [
         *formatted_chat_history,
         SystemMessage(

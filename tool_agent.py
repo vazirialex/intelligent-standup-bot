@@ -94,7 +94,7 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
 
     chat_template = [
         *langchain_messages,
-        SystemMessage(content=test_prompt),
+        SystemMessage(content=tool_prompt),
         HumanMessage(content=message),
     ]
    
@@ -118,8 +118,8 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
         return messages, tool_name
 
     agent_response, last_used_tool = execute_tool_calls(tool_response)
-    if last_used_tool == "friendly_conversation" and not has_update:
-        print("friendly conversation and no update exists")
+    # if last_used_tool == "friendly_conversation" and not has_update:
+    #     print("friendly conversation and no update exists")
         # attempt to create an update if no update exists yet and there's friendly conversation because 
         # try:
         #     create_standup_update(user_id, channel_id)

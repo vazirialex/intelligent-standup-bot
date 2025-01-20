@@ -57,11 +57,3 @@ def format_standup_update_to_slack(standup_update):
     return f"Here's your standup update:\n" + "\n".join([
         f"- {u['item']} ({u['status']})" for u in standup_update['updates']
     ])
-
-def format_no_github_access_message():
-    response = """
-    Hey there! I noticed you haven't connected your github account to the standup bot yet. 
-    Please connect your github account to the standup bot so that I can help you with your standup updates. 
-    You can do this by clicking the link in the standup bot message."""
-
-    return response

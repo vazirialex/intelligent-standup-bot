@@ -29,10 +29,10 @@ def reply(tool_agent_response, channel_id, user_id, message, last_used_tool) -> 
         Your task is to craft a beautiful response to the user's message.
         
         The developer has provided their update in the following format:
-        {update_data['updates']['updates'] if update_data and 'updates' in update_data and update_data['updates']['updates'] else "No updates provided"}
+        {update_data['updates']['updates'] if 'updates' in update_data and update_data['updates']['updates'] else "No updates provided"}
         
         Please format this update into a well-structured Slack message.
-        Write your response such that it follows the developer's preferred writing style: {update_data['updates']['preferred_style'] if update_data['updates']['preferred_style'] else "Paragraph"}.
+        Write your response such that it follows the developer's preferred writing style: {update_data['updates']['preferred_style'] if 'preferred_style' in update_data['updates'] else "Paragraph"}.
         
         For tasks that are BLOCKED, make sure to highlight the blockers clearly.
         Make sure to differentiate between yesterday and today updates if needed.
