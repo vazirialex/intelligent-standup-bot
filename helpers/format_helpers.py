@@ -24,15 +24,17 @@ def format_github_activity_to_slack(github_activity):
     
     # Add commits section if there are commits
     if github_activity.get('commits'):
-        commit_lines = [f"- [{c['repo']}] {c['message']}" for c in github_activity['commits']]
+        commit_lines = [f"- [repo: {c['repo']}] {c['message']}" for c in github_activity['commits']]
         sections.append("*Commits:*\n" + "\n".join(commit_lines))
     
     # Add PRs section if there are PRs
     if github_activity.get('pull_requests'):
         pr_lines = [f"- {pr['repo']} [{pr['title']}] ({pr['state']})" for pr in github_activity['pull_requests']]
         sections.append("*Pull Requests:*\n" + "\n".join(pr_lines))
-    
-    return "Here's your GitHub activity from the past 24 hours:\n" + "\n\n".join(sections)
+
+    result = "Here's your GitHub activity from the past 24 hours:\n" + "\n\n".join(sections)
+    print("github activity: ", result)
+    return result
 
 # def format_standup_update_to_slack(standup_update):
 #     """
