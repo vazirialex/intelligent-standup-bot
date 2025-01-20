@@ -21,7 +21,7 @@ def generate_github_oauth_url(state, channel_id):
     }
     return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
-def get_github_activity(slack_user_id):
+def get_github_activity(slack_user_id, date=None):
     """Get GitHub activity for a connected user."""
     github_token = get_github_token(slack_user_id)
     if not github_token:
@@ -47,7 +47,7 @@ def get_github_activity(slack_user_id):
     
     recent_commits = []
     recent_prs = []
-    since_date = (datetime.now() - timedelta(days=1)).isoformat()
+    since_date = date if date else (datetime.now() - timedelta(hours=24)).isoformat()
     
     for repo in repos_response.json():
         repo_name = repo['name']

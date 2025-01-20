@@ -3,8 +3,8 @@ from slack_sdk.errors import SlackApiError
 from datetime import datetime, timedelta
 from dotenv import find_dotenv, load_dotenv
 import os
-from .mongo_db_helpers import insert_item, persist_scheduled_message, standup_message_sent
-from .llm_helpers import derive_standup_message
+from .mongo_db_helpers import persist_scheduled_message, standup_message_sent, insert_item
+from .llm_helpers import derive_standup_message, create_standup_update
 
 load_dotenv(find_dotenv())
 
@@ -34,30 +34,32 @@ def fetch_conversation_history(channel_id, date=None, max_number_of_messages_to_
 async def send_standup_messages():
     users = _get_all_users()
     now = datetime.now()
-    next_9_am = datetime.combine(now.date() + timedelta(days=1), datetime.min.time()) + timedelta(hours=9)
-    timestamp = int(next_9_am.timestamp())
     for user_id in users:
         try:
             standup_message = derive_standup_message(user_id)
-            text = standup_message
-            if now.hour >= 9 and not standup_message_sent(user_id, now):
-                slack_client.chat_postMessage(
-                    channel=user_id,
-                    text=text
-                )
-            else:
-                slack_client.chat_scheduleMessage(
-                    channel=user_id,
-                    text=text,
-                    post_at=timestamp
-                )
-            persist_scheduled_message(user_id, text, now)
+            # slack_client.chat_scheduleMessage(
+            #     channel=user_id,
+            #     text=standup_message,
+            #     post_at=int(datetime.combine(now.date(), datetime.min.time()).timestamp()) + 9 * 60 * 60 # 9 am current day
+            # )
+
+            # TODO: Remove this after testing
+            slack_client.chat_postMessage(
+                channel=user_id,
+                text=standup_message
+            )
+            persist_scheduled_message(user_id, standup_message, now)
         except SlackApiError as e:
             print(f"Error sending message to {user_id}: {e.response['error']}")
 
 def send_github_oauth_message(channel_id, user_id):
+    # slack_client.chat_postMessage(
+    #     channel=channel_id,
+    #     user=user_id,
+    #     text="Successfully connected your GitHub account! :white_check_mark:"
+    # )
     slack_client.chat_postMessage(
-        channel=channel_id,
+        channel=user_id,
         user=user_id,
         text="Successfully connected your GitHub account! :white_check_mark:"
     )
