@@ -15,41 +15,34 @@ def reply(tool_agent_response, channel_id, user_id, message, last_used_tool) -> 
     system_prompt = ""
 
     # TODO: check if we want to use this if statement for the ask question and friendly conversation tools. Doing this will get me closer to my goal
-    # if last_used_tool not in ["create_standup_update", "make_edits_to_update"] and isinstance(tool_agent_response, str):
+    # TODO: Do we want to use the agent response within the system prompt to make the agent response more relevant?
+    # if last_used_tool not in ["create_standup_update", "make_edits_to_update"] and tool_agent_response and isinstance(tool_agent_response, list) and isinstance(tool_agent_response[0], str):
     #     print("executing tool agent response reply and tool agent response is: ", tool_agent_response)
-    #     return tool_agent_response
+    #     return tool_agent_response[0]
     
     # if we have an update and the last tool used was create or edit
-    # if update_data:
-    #     print("update data from reply agent is: ", update_data)
+    if update_data:
+        print("update data from reply agent is: ", update_data)
         
-    #     system_prompt = f"""
-    #     You are a project manager that responds to standup updates from developers.
-    #     Your task is to craft a beautiful response to the user's message.
+        system_prompt = f"""
+        You are a project manager that responds to standup updates from developers.
+        Your task is to craft a beautiful response to the user's message.
         
-    #     The developer has provided their update in the following format:
-    #     {update_data['updates']['updates'] if update_data and 'updates' in update_data and update_data['updates']['updates'] else "No updates provided"}
+        The developer has provided their update in the following format:
+        {update_data['updates']['updates'] if update_data and 'updates' in update_data and update_data['updates']['updates'] else "No updates provided"}
         
-    #     Please format this update into a well-structured Slack message.
-    #     Write your response such that it follows the developer's preferred writing style: {update_data['updates']['preferred_style'] if update_data['updates']['preferred_style'] else "Paragraph"}.
+        Please format this update into a well-structured Slack message.
+        Write your response such that it follows the developer's preferred writing style: {update_data['updates']['preferred_style'] if update_data['updates']['preferred_style'] else "Paragraph"}.
         
-    #     For tasks that are BLOCKED, make sure to highlight the blockers clearly.
-    #     Make sure to differentiate between yesterday and today updates if needed.
-    #     Use appropriate formatting for a clean slack message to make the message easy to read and include emojis for each task's status.
+        For tasks that are BLOCKED, make sure to highlight the blockers clearly.
+        Make sure to differentiate between yesterday and today updates if needed.
+        Use appropriate formatting for a clean slack message to make the message easy to read and include emojis for each task's status.
 
-    #     Reply with a brief and courteous message to the user followed by the formatted update.
-    #     """
-    # else:
-    #     # this is wrong. It's possible to have an update and still up in this block
-    #     system_prompt = """
-    #     You are a project manager that responds to standup updates from developers.
-    #     Your task is to craft a beautiful response to the user's message. 
-        
-    #     Please engage with the developer based on their message and the conversation history, and ask questions to get more information for a sufficient standup update if needed.
-    #     For clarity, it may be best to let the user know the status of the update that you have for them.
-    #     Use appropriate formatting for a slack message in your response and include emojis where appropriate.
-    #     """
-    system_prompt = """
+        Reply with a brief and courteous message to the user followed by the formatted update.
+        """
+    else:
+        # this is wrong. It's possible to have an update and still up in this block
+        system_prompt = """
         You are a project manager that responds to standup updates from developers.
         Your task is to craft a beautiful response to the user's message. 
         
@@ -57,6 +50,14 @@ def reply(tool_agent_response, channel_id, user_id, message, last_used_tool) -> 
         For clarity, it may be best to let the user know the status of the update that you have for them.
         Use appropriate formatting for a slack message in your response and include emojis where appropriate.
         """
+    # system_prompt = """
+    #     You are a project manager that responds to standup updates from developers.
+    #     Your task is to craft a beautiful response to the user's message. 
+        
+    #     Please engage with the developer based on their message and the conversation history, and ask questions to get more information for a sufficient standup update if needed.
+    #     For clarity, it may be best to let the user know the status of the update that you have for them.
+    #     Use appropriate formatting for a slack message in your response and include emojis where appropriate.
+    #     """
     # Combine system prompt with chat history and current message
     messages = [
         SystemMessage(content=system_prompt),

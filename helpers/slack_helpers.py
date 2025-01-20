@@ -5,6 +5,7 @@ from dotenv import find_dotenv, load_dotenv
 import os
 from .mongo_db_helpers import persist_scheduled_message, standup_message_sent, insert_item
 from .llm_helpers import derive_standup_message, create_standup_update
+from .github_helpers import get_github_token, generate_github_oauth_url
 
 load_dotenv(find_dotenv())
 
@@ -36,18 +37,69 @@ async def send_standup_messages():
     now = datetime.now()
     for user_id in users:
         try:
-            standup_message = derive_standup_message(user_id)
-            # slack_client.chat_scheduleMessage(
-            #     channel=user_id,
-            #     text=standup_message,
-            #     post_at=int(datetime.combine(now.date(), datetime.min.time()).timestamp()) + 9 * 60 * 60 # 9 am current day
-            # )
+            standup_message = None
+            github_token = get_github_token(user_id)
+            if not github_token:
+                oauth_url = generate_github_oauth_url(user_id, user_id)
+                response = {
+                    "blocks": [
+                        {
+                            "type": "header",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Good morning! :wave: Time for your standup update!"
+                            }
+                        },
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "It looks like you haven't connected your GitHub account to the standup bot yet. Please connect your GitHub account to the standup bot so that I can help you with your standup updates. You can do this by clicking the button below."
+                            }
+                        },
+                        {
+                            "type": "actions",
+                            "elements": [
+                                {
+                                    "type": "button",
+                                    "text": {
+                                        "type": "plain_text",
+                                        "text": "Connect GitHub"
+                                    },
+                                    "url": oauth_url,
+                                    "style": "primary"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "In the meantime, please provide your standup update including your statuses, plans for today, and any blockers you're facing. Thank you!"
+                            }
+                        }
+                    ],
+                    "response_type": "ephemeral"
+                }
+                standup_message = "Hello! Please provide your standup update including your statuses, plans for today, and any blockers you're facing. Thank you!"
+                slack_client.chat_postMessage(
+                    channel=user_id,
+                    blocks=response["blocks"],
+                    text=standup_message
+                )
+            else:
+                standup_message = derive_standup_message(user_id)
+                # slack_client.chat_scheduleMessage(
+                #     channel=user_id,
+                #     text=standup_message,
+                #     post_at=int(datetime.combine(now.date(), datetime.min.time()).timestamp()) + 9 * 60 * 60 # 9 am current day
+                # )
 
-            # TODO: Remove this after testing
-            slack_client.chat_postMessage(
-                channel=user_id,
-                text=standup_message
-            )
+                # TODO: Remove this after testing
+                slack_client.chat_postMessage(
+                    channel=user_id,
+                    text=standup_message
+                )
             persist_scheduled_message(user_id, standup_message, now)
         except SlackApiError as e:
             print(f"Error sending message to {user_id}: {e.response['error']}")

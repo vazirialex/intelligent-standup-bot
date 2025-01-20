@@ -68,7 +68,10 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
     Does the human have an existing update: {update_exists}
 
     Use only one tool to respond to the user and provide that tool the necessary context to respond to the user from above without changing any of the parameters.
-    Make sure to follow the tool's instructions carefully and only create or edit an update if there is sufficient information from the user and conversation history to do so.
+    You must analyze the conversation history carefully to determine if you have enough information to create or edit an update. Sufficient information is defined as having a status for each task.
+    It is likely that tasks and their associated statuses are in the conversation history, so use the conversation history to infer statuses for each task and the items that are in the update.
+    You MUST use the conversation history to infer statuses for each task and the items that are in the update.
+    Keep the conversation relevant to the user's standup update and only use friendly conversation if the user has provided a standup update.
     """.format(channel_id=channel_id, user_id=user_id, message=message, update_exists="Yes" if has_update else "No")
 
     test_prompt_2 = """
@@ -91,7 +94,7 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
 
     chat_template = [
         *langchain_messages,
-        SystemMessage(content=test_prompt_2),
+        SystemMessage(content=test_prompt),
         HumanMessage(content=message),
     ]
    
@@ -115,11 +118,6 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
         return messages, tool_name
 
     agent_response, last_used_tool = execute_tool_calls(tool_response)
-    print()
-    print()
-    print("agent_response and last_used_tool: ", agent_response, last_used_tool)
-    print()
-    print()
     if last_used_tool == "friendly_conversation" and not has_update:
         print("friendly conversation and no update exists")
         # attempt to create an update if no update exists yet and there's friendly conversation because 

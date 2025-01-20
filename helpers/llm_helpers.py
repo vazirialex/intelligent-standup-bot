@@ -196,9 +196,6 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_i
     prompt = ChatPromptTemplate.from_messages(messages)
     formatted_prompt = prompt.format(update=update, user_id=user_id, text=text)
     response = llm.invoke(formatted_prompt)
-    print()
-    print("Response from llm for update edits: ", response.content)
-    print()
     return json.loads(response.content)
 
 def ask_question_response(user_id: str, channel_id: str, message: str) -> str:

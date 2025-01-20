@@ -21,6 +21,7 @@ async def respond_to_message(message, say):
     if not tool_agent_response:
         await say(text="Sorry, I didn't understand that.")
         return
+    print("tool agent response is: ", tool_agent_response)
     reply_agent_response = reply(tool_agent_response, message["channel"], message["user"], message["text"], used_tool)
     save_message_to_db(message["user"], reply_agent_response, message["channel"], True)
     await say(text=reply_agent_response)
