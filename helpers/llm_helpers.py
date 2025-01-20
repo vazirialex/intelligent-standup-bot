@@ -320,7 +320,8 @@ def create_standup_update_from_conversation_history(text: str, user_id: str, cha
     Given a user's github activity and previous standup update, create a standup update for the user.
     Use this tool only if a user does not have a standup update for the day and if the user likes the drafted standup update inferred from github activity.
     """
-
+    yesterday = datetime.now() - timedelta(days=1)
+    previous_standup_update = get_standup_updates_by_user_id(user_id, yesterday.strftime("%Y-%m-%d"))[0] if update_exists(user_id, yesterday.strftime("%Y-%m-%d")) else "No updates provided"
     prompt_without_day_differentiation = """
             You are a project manager that creates standup updates for developers based on their github activity.
                 
@@ -345,6 +346,8 @@ def create_standup_update_from_conversation_history(text: str, user_id: str, cha
             - intelligent-standup-bot [try fixing reply relevance] (open)
             - intelligent-standup-bot [testing scheduled message integration] (closed)
             
+            Previous standup update:
+            No updates provided
 
             OUTPUT
             {{
@@ -370,16 +373,19 @@ def create_standup_update_from_conversation_history(text: str, user_id: str, cha
             """
     github_activity = get_github_activity(user_id) if get_github_token(user_id) else "No github activity"
     formatted_github_activity = format_github_activity_to_slack(github_activity)
+    formatted_previous_standup_update = format_standup_update_to_slack(previous_standup_update)
+
+    activity_message = """
+    {formatted_github_activity}
+
+    Previous standup update:
+    {formatted_previous_standup_update}
+    """.format(formatted_github_activity=formatted_github_activity, formatted_previous_standup_update=formatted_previous_standup_update)
     messages = [
-        # TODO: add conversation history if the user does not have an update in the database
-        # TODO: Update this to only give the standup update scheduled message and the user's reply after that?
         *convert_conversation_history_to_langchain_messages(get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=3)),
         SystemMessage(prompt_without_day_differentiation),
-        SystemMessage(formatted_github_activity),
-        HumanMessage(content=text)
+        SystemMessage(activity_message)
     ]
-    prompt = ChatPromptTemplate.from_messages(messages)
-    formatted_prompt = prompt.format(user_id=user_id, text=text)
-    response = llm.invoke(formatted_prompt)
-    print("response from create standup update: ", response)
+    response = llm.invoke(messages)
+    print("response from create standup update from conversation history: ", response)
     return json.loads(response.content)
