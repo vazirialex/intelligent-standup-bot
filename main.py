@@ -21,7 +21,7 @@ async def respond_to_message(message, say):
     if not tool_agent_response:
         await say(text="Sorry, I didn't understand that.")
         return
-    reply_agent_response = reply(message["channel"], message["user"], message["text"], used_tool)
+    reply_agent_response = reply(tool_agent_response, message["channel"], message["user"], message["text"], used_tool)
     save_message_to_db(message["user"], reply_agent_response, message["channel"], True)
     await say(text=reply_agent_response)
 
@@ -116,7 +116,7 @@ async def github_logout(ack, body, say):
     await say("Logged out of GitHub")
 
 async def schedule_standup_message():
-    num_seconds_in_one_day = 86400
+    num_seconds_in_one_day = 86400 - 5 * 60 # 5 minutes before 9 am
     while True:
         await slack_helpers.send_standup_messages()
         await asyncio.sleep(num_seconds_in_one_day)
