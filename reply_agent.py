@@ -21,7 +21,7 @@ def reply(tool_agent_response, channel_id, user_id, message, last_used_tool) -> 
     #     return tool_agent_response[0]
     
     # if we have an update and the last tool used was create or edit
-    if update_data and last_used_tool in ["create_standup_update", "make_edits_to_update"]:
+    if update_data and last_used_tool in ["create_standup_update", "make_edits_to_update", "create_standup_update_from_activity"]:
         print("update data from reply agent is: ", update_data)
         
         system_prompt = f"""

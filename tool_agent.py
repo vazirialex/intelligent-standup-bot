@@ -1,5 +1,5 @@
 from langchain_core.tools.structured import StructuredTool
-from helpers.llm_helpers import llm, ask_question_response, create_standup_update, make_edits_to_update, friendly_conversation_response, convert_conversation_history_to_langchain_messages
+from helpers.llm_helpers import llm, ask_question_response, create_standup_update, make_edits_to_update, friendly_conversation_response, convert_conversation_history_to_langchain_messages, create_standup_update_from_activity
 from helpers.mongo_db_helpers import insert_item, update_exists, get_standup_updates_by_user_id, get_messages_from_db
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -10,6 +10,7 @@ make_edits_to_update_tool = StructuredTool.from_function(func=make_edits_to_upda
 friendly_conversation_tool = StructuredTool.from_function(func=friendly_conversation_response)
 check_if_update_exists_tool = StructuredTool.from_function(func=update_exists)
 get_standup_update_by_user_id_tool = StructuredTool.from_function(func=get_standup_updates_by_user_id)
+create_update_from_activity_tool = StructuredTool.from_function(func=create_standup_update_from_activity)
 
 tool_map = {
     "create_standup_update": create_standup_update_tool,
@@ -17,14 +18,16 @@ tool_map = {
     "ask_question": ask_question_tool,
     "make_edits_to_update": make_edits_to_update_tool,
     "friendly_conversation": friendly_conversation_tool,
-    "friendly_conversation_response": friendly_conversation_tool
+    "friendly_conversation_response": friendly_conversation_tool,
+    "create_standup_update_from_activity": create_update_from_activity_tool
 }
 
 tools = [
     create_standup_update_tool,
     ask_question_tool,
     make_edits_to_update_tool,
-    friendly_conversation_tool
+    friendly_conversation_tool,
+    create_update_from_activity_tool
 ]
 
 agent = llm.bind_tools(tools)
@@ -42,10 +45,10 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
     user_id: {user_id}
     Does the human have an existing update: {update_exists}
 
-    You will also be given a conversation history with the user.
+    You will also be given a conversation history with the user. Use this conversation history to determine if you need to use the create_standup_update_from_activity tool, which will use the user's github activity and previous standup update from within the conversation history to create a standup update.
 
     You must use the tools provided to you to take the most appropriate actions to help the user with their standup update. You can use more than one tool if needed.
-    In situations where you need to use more than one tool, you should prioritize using the create_standup_update and make_edits_to_update tools first before the ask question and friendly_conversation tools.
+    In situations where you need to use more than one tool, you should consider using the ask question and friendly_conversation tools as the last tools to use.
 
     Here are some examples of when you may need to use more than one tool:
     - the user likes the standup update provided by the scheduled message, no update exists for this user yet, but the user has not replied with any updates for the current day. In this case, it would make sense to use the create_standup_update tool and then use the ask_question tool to respond to the user.
@@ -110,7 +113,7 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
             selected_tool = tool_map[tool_name]
             tool_output = selected_tool.invoke(tool_call["args"])
             messages.append(tool_output)
-            if tool_name == "create_standup_update" or tool_name == "make_edits_to_update":
+            if tool_name == "create_standup_update" or tool_name == "make_edits_to_update" or tool_name == "create_standup_update_from_activity":
                 try:
                     insert_item(user_id, tool_output)
                 except Exception as e:

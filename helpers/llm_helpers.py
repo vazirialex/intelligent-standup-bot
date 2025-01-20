@@ -32,8 +32,7 @@ llm = ChatOpenAI(
 
 def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
     """
-    Given a user's standup update and conversation history, extract the key insights from the update if and only ifthe update has sufficient information.
-    Uses the conversation history if needed to piece together the user's standup update.
+    Given a user's standup update, extract the key insights from the update if and only if the update has sufficient information.
     Only use this tool if there is no update already in the database and if there is sufficient information to update, delete, or add a given item.
     """
     prompt_with_day_differentiation = """
@@ -106,7 +105,7 @@ def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
     messages = [
         # TODO: add conversation history if the user does not have an update in the database
         # TODO: Update this to only give the standup update scheduled message and the user's reply after that?
-        *convert_conversation_history_to_langchain_messages(get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=4)),
+        # *convert_conversation_history_to_langchain_messages(get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=4)),
         SystemMessage(prompt_without_day_differentiation),
         HumanMessage(content=text)
     ]
@@ -286,10 +285,6 @@ def derive_standup_message(user_id: str) -> str:
     yesterday = datetime.now() - timedelta(days=1)
     previous_standup_update = get_standup_updates_by_user_id(user_id, yesterday.strftime("%Y-%m-%d"))[0] if update_exists(user_id, yesterday.strftime("%Y-%m-%d")) else "No updates provided"
 
-    print("previous standup update: ", previous_standup_update)
-    print()
-    print()
-
     messages = [
         SystemMessage(
             """
@@ -309,77 +304,83 @@ def derive_standup_message(user_id: str) -> str:
 
             {formatted_previous_standup_update}
 
-            """.format(formatted_github_activity=format_github_activity_to_slack(github_activity), formatted_previous_standup_update=format_standup_update_to_slack(previous_standup_update))
+            """.format(formatted_github_activity=formatted_github_activity, formatted_previous_standup_update=format_standup_update_to_slack(previous_standup_update))
         )
     ]
     response = llm.invoke(messages)
     return response.content
 
-def create_standup_update_from_conversation_history(text: str, user_id: str, channel_id: str) -> dict:
+def create_standup_update_from_activity(user_id: str, channel_id: str) -> dict:
     """
-    Given a user's github activity and previous standup update, create a standup update for the user.
-    Use this tool only if a user does not have a standup update for the day and if the user likes the drafted standup update inferred from github activity.
+    Given a user's github activity and previous standup update within the conversation history, create a standup update for the user.
+    Use this tool only if a user does not have a standup update for the day and if the user likes the drafted standup update inferred from github activity and previous standup update.
     """
-
+    yesterday = datetime.now() - timedelta(days=1)
+    previous_standup_update = get_standup_updates_by_user_id(user_id, yesterday.strftime("%Y-%m-%d"))[0] if update_exists(user_id, yesterday.strftime("%Y-%m-%d")) else "No updates provided"
     prompt_without_day_differentiation = """
-            You are a project manager that creates standup updates for developers based on their github activity.
-                
-            Your goal is to take what developers are saying and extract all updates.
-                
-            Here are some important rules to follow:
-            1. Identify the ticket number and status update. The status should be one of NOT_STARTED, IN_PROGRESS, IN_REVIEW, REJECTED, COMPLETED, OR BLOCKED. Use your best judgment to determine the status.
-            2. Identify the user's writing style and tone and summarize it in one word (e.g. Paragraph, Bullet points, etc.)
-            3. You are given conversation history between you and the user. Use this conversation history to determine if the user has provided sufficient information to craft a response.
-            4. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
-
-            Example:
-            INPUT
-            Here's your GitHub activity from the past 24 hours:
-            *Commits:*
-            - [repo: intelligent-standup-bot] bug fix on scheduled message
-            - [repo: intelligent-standup-bot] test fix create standup update from GH activity
-            - [repo: intelligent-standup-bot] update tool optimization
-            - [repo: intelligent-standup-bot] testing scheduled message integration
-
-            *Pull Requests:*
-            - intelligent-standup-bot [try fixing reply relevance] (open)
-            - intelligent-standup-bot [testing scheduled message integration] (closed)
+        You are a project manager that creates standup updates for developers based on their github activity.
             
+        Your goal is to take what developers are saying and extract all updates.
+            
+        Here are some important rules to follow:
+        1. Identify the ticket number and status update. The status should be one of NOT_STARTED, IN_PROGRESS, IN_REVIEW, REJECTED, COMPLETED, OR BLOCKED. Use your best judgment to determine the status.
+        2. Identify the user's writing style and tone and summarize it in one word (e.g. Paragraph, Bullet points, etc.)
+        3. You are given conversation history between you and the user. Use this conversation history to determine if the user has provided sufficient information to craft a response.
+        4. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
 
-            OUTPUT
-            {{
-                \"preferred_style\": \"bullet points\",
-                \"updates\": [
-                    {{
-                        \"item\": \"scheduled message integration\",
-                        \"status\": \"COMPLETED\",
-                        \"identified_blockers\": []
-                    }},
-                    {{
-                        \"item\": \"reply relevance fix\",
-                        \"status\": \"IN_REVIEW\",
-                        \"identified_blockers\": []
-                    }},
-                    {{
-                        \"item\": \"create standup update from GH activity\",
-                        \"status\": \"IN_PROGRESS\",
-                        \"identified_blockers\": []
-                    }}
-                ]
-            }}
-            """
+        Example:
+        INPUT
+        Here's your GitHub activity from the past 24 hours:
+        *Commits:*
+        - [repo: intelligent-standup-bot] bug fix on scheduled message
+        - [repo: intelligent-standup-bot] test fix create standup update from GH activity
+        - [repo: intelligent-standup-bot] update tool optimization
+        - [repo: intelligent-standup-bot] testing scheduled message integration
+
+        *Pull Requests:*
+        - intelligent-standup-bot [try fixing reply relevance] (open)
+        - intelligent-standup-bot [testing scheduled message integration] (closed)
+        
+        Previous standup update:
+        No updates provided
+
+        OUTPUT
+        {{
+            \"preferred_style\": \"bullet points\",
+            \"updates\": [
+                {{
+                    \"item\": \"scheduled message integration\",
+                    \"status\": \"COMPLETED\",
+                    \"identified_blockers\": []
+                }},
+                {{
+                    \"item\": \"reply relevance fix\",
+                    \"status\": \"IN_REVIEW\",
+                    \"identified_blockers\": []
+                }},
+                {{
+                    \"item\": \"create standup update from GH activity\",
+                    \"status\": \"IN_PROGRESS\",
+                    \"identified_blockers\": []
+                }}
+            ]
+        }}
+        """
     github_activity = get_github_activity(user_id) if get_github_token(user_id) else "No github activity"
     formatted_github_activity = format_github_activity_to_slack(github_activity)
+    formatted_previous_standup_update = format_standup_update_to_slack(previous_standup_update)
+
+    activity_message = """
+    {formatted_github_activity}
+
+    Previous standup update:
+    {formatted_previous_standup_update}
+    """.format(formatted_github_activity=formatted_github_activity, formatted_previous_standup_update=formatted_previous_standup_update)
     messages = [
-        # TODO: add conversation history if the user does not have an update in the database
-        # TODO: Update this to only give the standup update scheduled message and the user's reply after that?
         *convert_conversation_history_to_langchain_messages(get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=3)),
         SystemMessage(prompt_without_day_differentiation),
-        SystemMessage(formatted_github_activity),
-        HumanMessage(content=text)
+        SystemMessage(activity_message)
     ]
-    prompt = ChatPromptTemplate.from_messages(messages)
-    formatted_prompt = prompt.format(user_id=user_id, text=text)
-    response = llm.invoke(formatted_prompt)
-    print("response from create standup update: ", response)
+    response = llm.invoke(messages)
+    print("response from create standup update from conversation history: ", response)
     return json.loads(response.content)

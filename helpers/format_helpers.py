@@ -33,7 +33,6 @@ def format_github_activity_to_slack(github_activity):
         sections.append("*Pull Requests:*\n" + "\n".join(pr_lines))
 
     result = "Here's your GitHub activity from the past 24 hours:\n" + "\n\n".join(sections)
-    print("github activity: ", result)
     return result
 
 # def format_standup_update_to_slack(standup_update):
