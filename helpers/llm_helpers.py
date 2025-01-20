@@ -67,7 +67,7 @@ def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
             Your goal is to take what developers are saying and extract all updates.
                 
             Here are some important rules to follow:
-            1. Identify the ticket number and status update. The status should be one of NOT_STARTED, IN_PROGRESS, REJECTED, COMPLETED, OR BLOCKED. Use your best judgment to determine the status.
+            1. Identify the ticket number and status update. The status should be one of NOT_STARTED, IN_PROGRESS, IN_REVIEW, REJECTED, COMPLETED, OR BLOCKED. Use your best judgment to determine the status.
             2. Identify the user's writing style and tone and summarize it in one word (e.g. Paragraph, Bullet points, etc.)
             3. You are given conversation history between you and the user. Use this conversation history to determine if the user has provided sufficient information to craft a response.
             3. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
@@ -104,14 +104,12 @@ def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
             }}
             """
     messages = [
-        SystemMessage(
-            prompt_without_day_differentiation
-        ),
         # TODO: add conversation history if the user does not have an update in the database
         # TODO: Update this to only give the standup update scheduled message and the user's reply after that?
         *convert_conversation_history_to_langchain_messages(
             get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)
         ),
+        SystemMessage(prompt_without_day_differentiation),
         HumanMessage(content=text)
     ]
     prompt = ChatPromptTemplate.from_messages(messages)
@@ -169,7 +167,7 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_i
         1. Identify tasks that need updating or add new tasks if they are not already in the update.
         2. If you notice changes in their preferred writing style, update the preferred style in the provided update. (Something like Paragraph, Bullet points, etc.)
         3. Add or remove any information that you deem necessary given the user's reply.
-        4. Valid statuses are NOT_STARTED, IN_PROGRESS, REJECTED, COMPLETED, BLOCKED. Use your best judgment to determine the status.
+        4. Valid statuses are NOT_STARTED, IN_PROGRESS, IN_REVIEW, REJECTED, COMPLETED, and BLOCKED. Use your best judgment to determine the status.
         5. Return the response in JSON format, following the same structure as the update provided below.
         6. Do not make up any information or tasks. Only make edits to the information provided.
 
@@ -189,7 +187,7 @@ def make_edits_to_update(update_exists: bool, text: str, user_id: str, channel_i
         Remember to ensure the response is in JSON format and do not format it with ```json.
         """
     messages = [
-        # *formatted_chat_history,
+        *formatted_chat_history,
         SystemMessage(
             prompt_without_day_differentiation
         ),
