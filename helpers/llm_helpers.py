@@ -309,7 +309,7 @@ def derive_standup_message(user_id: str) -> str:
 
             {formatted_previous_standup_update}
 
-            """.format(formatted_github_activity=format_github_activity_to_slack(github_activity), formatted_previous_standup_update=formatted_github_activity)
+            """.format(formatted_github_activity=format_github_activity_to_slack(github_activity), formatted_previous_standup_update=format_standup_update_to_slack(previous_standup_update))
         )
     ]
     response = llm.invoke(messages)
