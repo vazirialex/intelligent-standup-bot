@@ -70,7 +70,7 @@ def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
             1. Identify the ticket number and status update. The status should be one of NOT_STARTED, IN_PROGRESS, IN_REVIEW, REJECTED, COMPLETED, OR BLOCKED. Use your best judgment to determine the status.
             2. Identify the user's writing style and tone and summarize it in one word (e.g. Paragraph, Bullet points, etc.)
             3. You are given conversation history between you and the user. Use this conversation history to determine if the user has provided sufficient information to craft a response.
-            3. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
+            4. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
 
             Example:
             INPUT
@@ -106,9 +106,7 @@ def create_standup_update(text: str, user_id: str, channel_id: str) -> dict:
     messages = [
         # TODO: add conversation history if the user does not have an update in the database
         # TODO: Update this to only give the standup update scheduled message and the user's reply after that?
-        *convert_conversation_history_to_langchain_messages(
-            get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)
-        ),
+        *convert_conversation_history_to_langchain_messages(get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=4)),
         SystemMessage(prompt_without_day_differentiation),
         HumanMessage(content=text)
     ]
@@ -236,6 +234,7 @@ def ask_question_response(user_id: str, channel_id: str, message: str) -> str:
 def friendly_conversation_response(user_id: str, channel_id: str, message: str) -> str:
     """
     Responds to generic messages from the user that are not standup updates only if the user has provided a standup update, such as common replies that end a conversation.
+    Only use this tool if the user already has a standup update for the day. Otherwise, use the ask_question_response tool.
     """
     conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=2)
     formatted_conversation_history = convert_conversation_history_to_langchain_messages(conversation_history)
@@ -318,46 +317,42 @@ def derive_standup_message(user_id: str) -> str:
 
 def create_standup_update_from_conversation_history(text: str, user_id: str, channel_id: str) -> dict:
     """
-    Creates a standup update from a conversation history with the user in cases where the user accepts the standup update provided by the scheduled message.
+    Given a user's github activity and previous standup update, create a standup update for the user.
+    Use this tool only if a user does not have a standup update for the day and if the user likes the drafted standup update inferred from github activity.
     """
-    messages = [
-        SystemMessage(
-            """
-            You are a project manager that listens to standup updates from developers and extracts their key insights.
+
+    prompt_without_day_differentiation = """
+            You are a project manager that creates standup updates for developers based on their github activity.
                 
-            Your goal is to take what developers are saying about their tasks and extract all updates. You will be given a previous standup update and what the user has said in the conversation history.
-            Using this information, you must determine if you should create the standup update or reply to the user asking for help.
+            Your goal is to take what developers are saying and extract all updates.
                 
             Here are some important rules to follow:
-            1. First, determine if the user has accepted the standup update provided by the scheduled message. If they have, create the standup update.
-            2. You can use the linear ticket status or github PR status to define the status field. The status should be one of NOT_STARTED, IN_PROGRESS, REJECTED, COMPLETED, IN_REVIEW, OR BLOCKED. Use your best judgment to determine.
-            3. Identify the user's writing style and tone and summarize it in one word (e.g. Paragraph, Bullet points, etc.)
-            4. You are given conversation history between you and the user. Use this conversation history to determine if the user has provided sufficient information to craft a response.
-            5. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"PR#123\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
+            1. Identify the ticket number and status update. The status should be one of NOT_STARTED, IN_PROGRESS, IN_REVIEW, REJECTED, COMPLETED, OR BLOCKED. Use your best judgment to determine the status.
+            2. Identify the user's writing style and tone and summarize it in one word (e.g. Paragraph, Bullet points, etc.)
+            3. You are given conversation history between you and the user. Use this conversation history to determine if the user has provided sufficient information to craft a response.
+            4. Return your response in JSON format with the following structure: {{\"preferred_style\": \"Paragraph\", \"updates\": [{{\"item\": \"task-1\",\"status\": \"IN_PROGRESS\",\"identified_blockers\": []}}, {{\"item\": \"task-2\",\"status\": \"BLOCKED\",\"identified_blockers\": [\"waiting on team-1\", \"task-4\"]}}]}}
 
             Example:
             INPUT
-            - I raised a PR for task-1. I am working on raising a PR for fixing the counter button bug. 
-            - I pushed the fix for task-3 to production so we can close that out.
-            - Task-4 is currently blocked while we wait for task-5 to be completed
+            
 
             OUTPUT
             {{
-                \"preferred_style\": \"Bullet points\",
+                \"preferred_style\": \"Paragraph\",
                 \"updates\": [
                     {{
                         \"item\": \"task-1\",
-                        \"status\": \"IN_REVIEW\",
+                        \"status\": \"COMPLETED\",
                         \"identified_blockers\": []
                     }},
                     {{
-                        \"item\": \"counter button bug\",
-                        \"status\": \"IN_PROGRRESS\",
+                        \"item\": \"task-2\",
+                        \"status\": \"COMPLETED\",
                         \"identified_blockers\": []
                     }},
                     {{
                         \"item\": \"task-3\",
-                        \"status\": \"COMPLETED\",
+                        \"status\": \"IN_PROGRESS\",
                         \"identified_blockers\": []
                     }},
                     {{
@@ -367,20 +362,19 @@ def create_standup_update_from_conversation_history(text: str, user_id: str, cha
                     }}
                 ]
             }}
-            """
-        ),
+            """.format(user_id=user_id, text=text)
+    github_activity = get_github_activity(user_id) if get_github_token(user_id) else "No github activity"
+    formatted_github_activity = format_github_activity_to_slack(github_activity)
+    messages = [
         # TODO: add conversation history if the user does not have an update in the database
         # TODO: Update this to only give the standup update scheduled message and the user's reply after that?
-        *convert_conversation_history_to_langchain_messages(
-            get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=6)
-        ),
-        HumanMessage(content=
-            f"""
-            {text}
-            """
-        )
+        *convert_conversation_history_to_langchain_messages(get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=3)),
+        SystemMessage(prompt_without_day_differentiation),
+        SystemMessage(formatted_github_activity),
+        HumanMessage(content=text)
     ]
     prompt = ChatPromptTemplate.from_messages(messages)
     formatted_prompt = prompt.format(user_id=user_id, text=text)
     response = llm.invoke(formatted_prompt)
+    print("response from create standup update: ", response)
     return json.loads(response.content)

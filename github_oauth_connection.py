@@ -41,7 +41,6 @@ class GitHubCallbackHandler(BaseHTTPRequestHandler):
                 
                 token_data = response.json()
 
-                print("token data is: ", token_data)
                 if 'access_token' in token_data:
                     # Store the token
                     save_github_token(state, token_data['access_token'])
