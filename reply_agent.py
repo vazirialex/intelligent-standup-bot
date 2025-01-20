@@ -14,6 +14,7 @@ def reply(tool_agent_response, channel_id, user_id, message, last_used_tool) -> 
     update_data = get_standup_updates_by_user_id(user_id)[0] if has_update else None
     system_prompt = ""
 
+    # TODO: check if we want to use this if statement for the ask question and friendly conversation tools. Doing this will get me closer to my goal
     # if last_used_tool not in ["create_standup_update", "make_edits_to_update"] and isinstance(tool_agent_response, str):
     #     print("executing tool agent response reply and tool agent response is: ", tool_agent_response)
     #     return tool_agent_response

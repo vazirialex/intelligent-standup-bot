@@ -29,7 +29,7 @@ def format_github_activity_to_slack(github_activity):
     
     # Add PRs section if there are PRs
     if github_activity.get('pull_requests'):
-        pr_lines = [f"- [{pr['repo']}] {pr['title']} ({pr['status']})" for pr in github_activity['pull_requests']]
+        pr_lines = [f"- {pr['repo']} [{pr['title']}] ({pr['state']})" for pr in github_activity['pull_requests']]
         sections.append("*Pull Requests:*\n" + "\n".join(pr_lines))
     
     return "Here's your GitHub activity from the past 24 hours:\n" + "\n\n".join(sections)

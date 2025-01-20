@@ -71,12 +71,27 @@ def execute_agent_with_user_context(message: str, user_id: str, channel_id: str)
     Make sure to follow the tool's instructions carefully and only create or edit an update if there is sufficient information from the user and conversation history to do so.
     """.format(channel_id=channel_id, user_id=user_id, message=message, update_exists="Yes" if has_update else "No")
 
-    conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=4)
+    test_prompt_2 = """
+    You are a project manager that helps developers with their standup updates. You are given a set of tools to use to help you reply to the user's standup update.
+
+    You are also given the following context:
+    channel_id: {channel_id}
+    user_id: {user_id}
+    Does the human have an existing update: {update_exists}
+
+    Use only one tool to respond to the user and provide that tool the necessary context to respond to the user from above without changing any of the parameters.
+    Make sure to follow the tool's instructions carefully and only create or edit an update if there is sufficient information from the user and conversation history to do so.
+    You should always be asking yourself if you have enough information to create or edit an update. 
+    If not, asking the user for more information about statuses and blockers should be your first priority using the ask_question tool.
+    Remember to not change any of the parameters like the channel_id, user_id, update_exists, and message from the user.
+    """.format(channel_id=channel_id, user_id=user_id, message=message, update_exists="Yes" if has_update else "No")
+
+    conversation_history = get_messages_from_db(user_id, channel_id, max_number_of_messages_to_fetch=8)
     langchain_messages = convert_conversation_history_to_langchain_messages(conversation_history)
 
     chat_template = [
         *langchain_messages,
-        SystemMessage(content=test_prompt),
+        SystemMessage(content=test_prompt_2),
         HumanMessage(content=message),
     ]
    
