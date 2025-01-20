@@ -334,35 +334,40 @@ def create_standup_update_from_conversation_history(text: str, user_id: str, cha
 
             Example:
             INPUT
+            Here's your GitHub activity from the past 24 hours:
+            *Commits:*
+            - [repo: intelligent-standup-bot] bug fix on scheduled message
+            - [repo: intelligent-standup-bot] test fix create standup update from GH activity
+            - [repo: intelligent-standup-bot] update tool optimization
+            - [repo: intelligent-standup-bot] testing scheduled message integration
+
+            *Pull Requests:*
+            - intelligent-standup-bot [try fixing reply relevance] (open)
+            - intelligent-standup-bot [testing scheduled message integration] (closed)
             
 
             OUTPUT
             {{
-                \"preferred_style\": \"Paragraph\",
+                \"preferred_style\": \"bullet points\",
                 \"updates\": [
                     {{
-                        \"item\": \"task-1\",
+                        \"item\": \"scheduled message integration\",
                         \"status\": \"COMPLETED\",
                         \"identified_blockers\": []
                     }},
                     {{
-                        \"item\": \"task-2\",
-                        \"status\": \"COMPLETED\",
+                        \"item\": \"reply relevance fix\",
+                        \"status\": \"IN_REVIEW\",
                         \"identified_blockers\": []
                     }},
                     {{
-                        \"item\": \"task-3\",
+                        \"item\": \"create standup update from GH activity\",
                         \"status\": \"IN_PROGRESS\",
                         \"identified_blockers\": []
-                    }},
-                    {{
-                        \"item\": \"task-4\",
-                        \"status\": \"BLOCKED\",
-                        \"identified_blockers\": [\"task-5\"]
                     }}
                 ]
             }}
-            """.format(user_id=user_id, text=text)
+            """
     github_activity = get_github_activity(user_id) if get_github_token(user_id) else "No github activity"
     formatted_github_activity = format_github_activity_to_slack(github_activity)
     messages = [
