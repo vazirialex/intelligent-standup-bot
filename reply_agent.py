@@ -41,7 +41,7 @@ def reply(tool_agent_response, channel_id, user_id, message, last_used_tool) -> 
         Reply with a brief and courteous message to the user followed by the formatted update.
         """
     else:
-        # this is wrong. It's possible to have an update and still up in this block
+        # this is wrong. It's possible to have an update and still up in this block. if so, use the preferred style from the update data
         system_prompt = """
         You are a project manager that responds to standup updates from developers.
         Your task is to craft a beautiful response to the user's message. 
